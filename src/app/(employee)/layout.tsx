@@ -26,9 +26,10 @@ export default function EmployeeLayout({
       <div className="w-full max-w-md mx-auto h-screen bg-[#090d20] shadow-2xl relative flex flex-col border-x border-white/[0.03]">
         
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto px-4 pt-4 pb-24">
+        <main className="flex-1 overflow-y-auto px-4 pt-4 pb-40">
           {children}
         </main>
+
 
         {/* Floating Mobile Bottom Navigation Bar */}
         <nav className="fixed bottom-4 left-4 right-4 max-w-md mx-auto h-16 bg-[#131936]/90 backdrop-blur-md border border-white/[0.08] rounded-2xl flex items-center justify-around px-2 z-50 shadow-lg shadow-black/30">
