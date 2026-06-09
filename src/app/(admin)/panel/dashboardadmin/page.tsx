@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { getSession } from '@/lib/session';
 import { supabase } from '@/lib/supabase';
 import { redirect } from 'next/navigation';
-import { Users, UserCheck, AlertCircle, Clock, MapPin, Search } from 'lucide-react';
+import { Users, UserCheck, AlertCircle, Clock, MapPin, Search, Camera } from 'lucide-react';
 
 export const metadata: Metadata = {
   title: 'Dashboard Admin - E-Presensi',
@@ -137,6 +137,7 @@ export default async function AdminDashboardPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-900/50 border-b border-slate-800 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                <th className="px-6 py-4">Foto Wajah</th>
                 <th className="px-6 py-4">Nama / NIK</th>
                 <th className="px-6 py-4">Departemen</th>
                 <th className="px-6 py-4">Tipe Jam Kerja</th>
@@ -150,6 +151,32 @@ export default async function AdminDashboardPage() {
               {logs && logs.length > 0 ? (
                 logs.map((log) => (
                   <tr key={log.id} className="hover:bg-slate-800/30 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-9 h-12 bg-slate-950 border border-slate-800 rounded-lg overflow-hidden flex items-center justify-center shrink-0" title="Foto Masuk">
+                          {log.foto_in ? (
+                            <img 
+                              src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/absensi/${log.foto_in}`} 
+                              alt="In" 
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <Camera className="w-4 h-4 text-slate-700" />
+                          )}
+                        </div>
+                        <div className="w-9 h-12 bg-slate-950 border border-slate-800 rounded-lg overflow-hidden flex items-center justify-center shrink-0" title="Foto Pulang">
+                          {log.foto_out ? (
+                            <img 
+                              src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/absensi/${log.foto_out}`} 
+                              alt="Out" 
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <Camera className="w-4 h-4 text-slate-700" />
+                          )}
+                        </div>
+                      </div>
+                    </td>
                     <td className="px-6 py-4">
                       <div className="font-bold text-white">{log.karyawan?.nama_lengkap}</div>
                       <div className="text-[10px] text-slate-500 mt-0.5">NIK: {log.nik}</div>
@@ -188,7 +215,7 @@ export default async function AdminDashboardPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-slate-500 text-xs">
+                  <td colSpan={8} className="px-6 py-12 text-center text-slate-500 text-xs">
                     Belum ada data presensi yang tercatat hari ini.
                   </td>
                 </tr>

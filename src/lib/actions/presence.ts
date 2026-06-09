@@ -27,8 +27,16 @@ export async function storePresenceAction(formData: FormData) {
   }
 
   const nik = session.nik!;
-  const today = new Date().toLocaleDateString('en-CA'); // Get local date in YYYY-MM-DD
-  const currentTime = new Date().toTimeString().split(' ')[0]; // HH:MM:SS
+  
+  // Format current date and time strictly in Asia/Jakarta (WIB) timezone
+  const optionsDate = { timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit' } as const;
+  const optionsTime = { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false } as const;
+  
+  const formatterDate = new Intl.DateTimeFormat('en-CA', optionsDate);
+  const formatterTime = new Intl.DateTimeFormat('en-GB', optionsTime); // en-GB format outputs HH:MM:SS
+  
+  const today = formatterDate.format(new Date()); // YYYY-MM-DD
+  const currentTime = formatterTime.format(new Date()); // HH:MM:SS
   const currentDateTimeStr = `${today} ${currentTime}`;
   
   const lokasi = formData.get('lokasi') as string; // Format: "lat,lng"
@@ -126,14 +134,17 @@ export async function storePresenceAction(formData: FormData) {
 
       // Check if it's already time to clock out
       // For cross-day shifts (lintashari = 1), clock out is usually the next day
-      const tglPulangStr = jamkerja.lintashari === 1 
+      const tglPulangStr = jamkerja.lintashari === 1
         ? new Date(new Date(today).getTime() + 24 * 60 * 60 * 1000).toLocaleDateString('en-CA')
         : today;
       const jamkerjaPulangStr = `${tglPulangStr} ${jamkerja.jam_pulang}`;
 
+      // Bypassed: Allowed from 00:00 WIB to 23:59 WIB
+      /*
       if (currentDateTimeStr < jamkerjaPulangStr) {
         return { error: `Maaf, belum waktunya pulang. Jam pulang dijadwalkan pukul ${jamkerja.jam_pulang.substring(0, 5)}.` };
       }
+      */
 
       // Calculate total work hours
       let totalJam = null;
@@ -166,13 +177,15 @@ export async function storePresenceAction(formData: FormData) {
 
     } else {
       // ----- PROCESS CLOCK IN -----
-      // Validate time window for clock in
+      // Validate time window for clock in (Bypassed: Allowed from 00:00 WIB to 23:59 WIB)
+      /*
       if (currentTime < jamkerja.awal_jam_masuk) {
         return { error: `Maaf, belum waktunya absen masuk. Absen dibuka mulai pukul ${jamkerja.awal_jam_masuk.substring(0, 5)}.` };
       }
       if (currentTime > jamkerja.akhir_jam_masuk) {
         return { error: `Maaf, waktu absen masuk sudah habis. Batas akhir adalah pukul ${jamkerja.akhir_jam_masuk.substring(0, 5)}.` };
       }
+      */
 
       // Insert Database
       const { error: insertError } = await supabase
