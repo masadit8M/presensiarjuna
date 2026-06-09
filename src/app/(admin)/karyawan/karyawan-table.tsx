@@ -41,6 +41,7 @@ export default function KaryawanTable({
   const [noHp, setNoHp] = useState('');
   const [kodeDept, setKodeDept] = useState('');
   const [kodeCabang, setKodeCabang] = useState('');
+  const [password, setPassword] = useState('');
 
   const openCreateModal = () => {
     setEditingKaryawan(null);
@@ -50,6 +51,7 @@ export default function KaryawanTable({
     setNoHp('');
     setKodeDept('');
     setKodeCabang('');
+    setPassword('');
     setError(null);
     setIsModalOpen(true);
   };
@@ -62,6 +64,7 @@ export default function KaryawanTable({
     setNoHp(k.no_hp);
     setKodeDept(k.kode_dept || '');
     setKodeCabang(k.kode_cabang || '');
+    setPassword('');
     setError(null);
     setIsModalOpen(true);
   };
@@ -78,6 +81,7 @@ export default function KaryawanTable({
       formData.append('no_hp', noHp);
       formData.append('kode_dept', kodeDept);
       formData.append('kode_cabang', kodeCabang);
+      formData.append('password', password);
 
       const result = editingKaryawan 
         ? await updateKaryawanAction(editingKaryawan.nik, formData)
@@ -108,16 +112,21 @@ export default function KaryawanTable({
   };
 
   const handleResetPassword = (nik: string, name: string) => {
-    if (!confirm(`Riset password untuk karyawan "${name}" kembali ke default "12345"?`)) {
+    const val = prompt(`Masukkan password baru untuk karyawan "${name}":`, "12345");
+    if (val === null) return; // user cancelled
+    
+    const cleanPassword = val.trim();
+    if (!cleanPassword) {
+      alert("Password tidak boleh kosong!");
       return;
     }
 
     startTransition(async () => {
-      const result = await resetKaryawanPasswordAction(nik);
+      const result = await resetKaryawanPasswordAction(nik, cleanPassword);
       if (result?.error) {
         alert(result.error);
       } else {
-        alert('Password berhasil diriset menjadi "12345"');
+        alert(`Password untuk "${name}" berhasil diubah menjadi "${cleanPassword}"`);
         router.refresh();
       }
     });
@@ -387,6 +396,21 @@ export default function KaryawanTable({
                   value={noHp}
                   onChange={(e) => setNoHp(e.target.value)}
                   placeholder="Contoh: 0812XXXXXXXX"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Password Input */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-300">
+                  Password {editingKaryawan ? '(Kosongkan jika tidak ingin diubah)' : '(Kosongkan untuk default "12345")'}
+                </label>
+                <input
+                  type="password"
+                  disabled={isPending}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={editingKaryawan ? "Masukkan password baru jika ingin diubah" : "Default: 12345"}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
               </div>

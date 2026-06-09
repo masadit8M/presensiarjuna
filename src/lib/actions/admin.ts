@@ -26,7 +26,8 @@ export async function createKaryawanAction(formData: FormData) {
     const no_hp = formData.get('no_hp') as string;
     const kode_dept = formData.get('kode_dept') as string;
     const kode_cabang = formData.get('kode_cabang') as string;
-    const password = await bcrypt.hash('12345', 10); // default password
+    const inputPassword = formData.get('password') as string;
+    const password = await bcrypt.hash(inputPassword || '12345', 10); // default password if empty
 
     if (!nik || !nama_lengkap || !jabatan || !no_hp || !kode_dept || !kode_cabang) {
       return { error: 'Semua kolom wajib diisi!' };
@@ -66,20 +67,27 @@ export async function updateKaryawanAction(nik: string, formData: FormData) {
     const no_hp = formData.get('no_hp') as string;
     const kode_dept = formData.get('kode_dept') as string;
     const kode_cabang = formData.get('kode_cabang') as string;
+    const inputPassword = formData.get('password') as string;
 
     if (!nama_lengkap || !jabatan || !no_hp || !kode_dept || !kode_cabang) {
       return { error: 'Semua kolom wajib diisi!' };
     }
 
+    const updateData: any = {
+      nama_lengkap,
+      jabatan,
+      no_hp,
+      kode_dept,
+      kode_cabang,
+    };
+
+    if (inputPassword && inputPassword.trim() !== '') {
+      updateData.password = await bcrypt.hash(inputPassword, 10);
+    }
+
     const { error } = await supabase
       .from('karyawan')
-      .update({
-        nama_lengkap,
-        jabatan,
-        no_hp,
-        kode_dept,
-        kode_cabang,
-      })
+      .update(updateData)
       .eq('nik', nik);
 
     if (error) {
@@ -124,10 +132,11 @@ export async function deleteKaryawanAction(nik: string) {
   }
 }
 
-export async function resetKaryawanPasswordAction(nik: string) {
+export async function resetKaryawanPasswordAction(nik: string, passwordInput?: string) {
   try {
     await verifyAdmin();
-    const password = await bcrypt.hash('12345', 10);
+    const rawPassword = passwordInput || '12345';
+    const password = await bcrypt.hash(rawPassword, 10);
 
     const { error } = await supabase
       .from('karyawan')
