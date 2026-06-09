@@ -169,17 +169,17 @@ export default function PresensiClient({
   // 5. Submit presence action
   const handlePresenceSubmit = () => {
     if (!userCoords) {
-      setSubmissionError('GPS belum mendapatkan koordinat. Tunggu sebentar.');
+      setSubmissionError('Presensi Gagal karena GPS belum mendapatkan koordinat. Tunggu sebentar.');
       return;
     }
     if (!activeSchedule) {
-      setSubmissionError('Jadwal jam kerja belum dipilih.');
+      setSubmissionError('Presensi Gagal karena Jadwal jam kerja belum dipilih.');
       return;
     }
 
     const imageSrc = webcamRef.current?.getScreenshot();
     if (!imageSrc) {
-      setSubmissionError('Gagal menangkap foto wajah dari kamera.');
+      setSubmissionError('Presensi Gagal karena Gagal menangkap foto wajah dari kamera.');
       return;
     }
 
@@ -195,9 +195,9 @@ export default function PresensiClient({
       const result = await storePresenceAction(formData);
 
       if (result.error) {
-        setSubmissionError(result.error);
+        setSubmissionError(`Presensi Gagal karena ${result.error}`);
       } else if (result.success) {
-        setSubmissionSuccess(result.message || 'Absensi sukses dicatat.');
+        setSubmissionSuccess(`Presensi Sukses: ${result.message || 'Absensi sukses dicatat.'}`);
         // Wait 2.5 seconds and redirect
         setTimeout(() => {
           router.push('/dashboard');
@@ -266,28 +266,7 @@ export default function PresensiClient({
         )
       )}
 
-      {/* Success Banner */}
-      {submissionSuccess && (
-        <div className="bg-emerald-500/15 border border-emerald-500/30 rounded-2xl p-4 flex items-start space-x-3 text-emerald-300 text-sm animate-fade-in">
-          <CheckCircle className="w-5 h-5 shrink-0 mt-0.5" />
-          <span>{submissionSuccess}</span>
-        </div>
-      )}
 
-      {/* Error Banners */}
-      {submissionError && (
-        <div className="bg-red-500/15 border border-red-500/30 rounded-2xl p-4 flex items-start space-x-3 text-red-300 text-sm">
-          <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
-          <span>{submissionError}</span>
-        </div>
-      )}
-
-      {gpsError && (
-        <div className="bg-red-500/15 border border-red-500/30 rounded-2xl p-4 flex items-start space-x-3 text-red-300 text-sm">
-          <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
-          <span>{gpsError}</span>
-        </div>
-      )}
 
       {/* Geofence Status Information */}
       {!loadingGps && !gpsError && distance !== null && (
@@ -356,6 +335,29 @@ export default function PresensiClient({
           )}
         </div>
       </div>
+
+      {/* Success Banner */}
+      {submissionSuccess && (
+        <div className="bg-emerald-500/15 border border-emerald-500/30 rounded-2xl p-4 flex items-start space-x-3 text-emerald-300 text-sm animate-fade-in">
+          <CheckCircle className="w-5 h-5 shrink-0 mt-0.5" />
+          <span>{submissionSuccess}</span>
+        </div>
+      )}
+
+      {/* Error Banners */}
+      {submissionError && (
+        <div className="bg-red-500/15 border border-red-500/30 rounded-2xl p-4 flex items-start space-x-3 text-red-300 text-sm animate-fade-in">
+          <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+          <span>{submissionError}</span>
+        </div>
+      )}
+
+      {gpsError && (
+        <div className="bg-red-500/15 border border-red-500/30 rounded-2xl p-4 flex items-start space-x-3 text-red-300 text-sm animate-fade-in">
+          <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+          <span>{gpsError}</span>
+        </div>
+      )}
 
       {/* Actions Submission button */}
       <button
