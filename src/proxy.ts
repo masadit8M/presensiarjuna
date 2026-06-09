@@ -55,7 +55,12 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  return NextResponse.next();
+  const response = NextResponse.next();
+  // Prevent caching of any page or RSC request to avoid cPanel/Hostinger Nginx caching issues (serving RSC instead of HTML)
+  response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  response.headers.set('Pragma', 'no-cache');
+  response.headers.set('Expires', '0');
+  return response;
 }
 
 export const config = {
