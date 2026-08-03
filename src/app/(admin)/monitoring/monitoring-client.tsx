@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useTransition } from 'react';
 import { getMonitoringLogsAction } from '@/lib/actions/admin';
 import { Calendar, MapPin, Building2, Search, Loader2, Clock, X, Check, XSquare, Camera, AlertTriangle } from 'lucide-react';
+import PresensiPhoto from '@/components/presensi-photo';
 import 'leaflet/dist/leaflet.css';
 
 interface MonitoringClientProps {
@@ -250,28 +251,8 @@ export default function MonitoringClient({
                       {/* Face Capture image column */}
                       <td className="px-6 py-4">
                         <div className="flex items-center space-x-2">
-                          <div className="w-9 h-12 bg-slate-950 border border-slate-800 rounded-lg overflow-hidden flex items-center justify-center shrink-0" title="Foto Masuk">
-                            {log.foto_in ? (
-                              <img 
-                                src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/absensi/${log.foto_in}`} 
-                                alt="In" 
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <Camera className="w-4 h-4 text-slate-700" />
-                            )}
-                          </div>
-                          <div className="w-9 h-12 bg-slate-950 border border-slate-800 rounded-lg overflow-hidden flex items-center justify-center shrink-0" title="Foto Pulang">
-                            {log.foto_out ? (
-                              <img 
-                                src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/absensi/${log.foto_out}`} 
-                                alt="Out" 
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <Camera className="w-4 h-4 text-slate-700" />
-                            )}
-                          </div>
+                          <PresensiPhoto filename={log.foto_in} title="Foto Masuk" alt="Foto Masuk" />
+                          <PresensiPhoto filename={log.foto_out} title="Foto Pulang" alt="Foto Pulang" />
                         </div>
                       </td>
 
