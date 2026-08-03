@@ -23,11 +23,11 @@ export default function PresensiPhoto({
   const [hasError, setHasError] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
 
-  if (!filename || filename.trim() === '') {
+  if (!filename || filename.trim() === '' || hasError) {
     return (
       <div
         className={`${className} bg-slate-950 border border-slate-800 rounded-lg overflow-hidden flex items-center justify-center shrink-0 select-none`}
-        title={`${title} (Belum Ada)`}
+        title={hasError ? `${title} (Foto Tidak Ditemukan di Storage)` : `${title} (Belum Absen)`}
       >
         <Camera className="w-4 h-4 text-slate-700" />
       </div>
@@ -43,17 +43,6 @@ export default function PresensiPhoto({
     srcUrl = `${baseUrl}/storage/v1/object/public/${bucket}/${cleanFilename}`;
   }
 
-  if (hasError) {
-    return (
-      <div
-        className={`${className} bg-slate-950 border border-slate-800 rounded-lg overflow-hidden flex items-center justify-center shrink-0 select-none`}
-        title={`${title} (Foto Tidak Ditemukan)`}
-      >
-        <Camera className="w-4 h-4 text-slate-700 opacity-60" />
-      </div>
-    );
-  }
-
   return (
     <>
       <div
@@ -67,7 +56,10 @@ export default function PresensiPhoto({
           src={srcUrl}
           alt={alt}
           className="w-full h-full object-cover"
-          onError={() => setHasError(true)}
+          onError={(e) => {
+            e.currentTarget.style.display = 'none';
+            setHasError(true);
+          }}
         />
         {allowZoom && (
           <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -103,6 +95,9 @@ export default function PresensiPhoto({
                 src={srcUrl}
                 alt={alt}
                 className="max-w-full max-h-full object-contain"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
               />
             </div>
           </div>
