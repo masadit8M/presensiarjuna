@@ -54,8 +54,15 @@ $app = require_once __DIR__ . '/bootstrap/app.php';
 
 $kernel = $app->make(Kernel::class);
 
-$response = $kernel->handle(
-    $request = Request::capture()
-)->send();
-
-$kernel->terminate($request, $response);
+try {
+    $response = $kernel->handle(
+        $request = Request::capture()
+    )->send();
+    $kernel->terminate($request, $response);
+} catch (\Throwable $e) {
+    http_response_code(200);
+    echo "<h1>Laravel Error Diagnostik</h1>";
+    echo "<p><strong>Message:</strong> " . htmlspecialchars($e->getMessage()) . "</p>";
+    echo "<p><strong>File:</strong> " . htmlspecialchars($e->getFile()) . ":" . $e->getLine() . "</p>";
+    echo "<pre>" . htmlspecialchars($e->getTraceAsString()) . "</pre>";
+}
