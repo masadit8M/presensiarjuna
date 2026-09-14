@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, Users, MapPin, Building2, Clock, 
-  Map, FileSpreadsheet, FileText, LogOut, Menu, X
+  Map, FileSpreadsheet, FileText, LogOut, Menu, X, Banknote
 } from 'lucide-react';
 import { logoutAction } from '@/lib/actions/auth';
 
@@ -33,6 +33,7 @@ export default function AdminLayout({
     { label: 'Monitoring Presensi', icon: Map, href: '/monitoring' },
     { label: 'Laporan Kehadiran', icon: FileText, href: '/laporan' },
     { label: 'Rekap Presensi', icon: FileSpreadsheet, href: '/rekap' },
+    { label: 'Penggajian & Slip Gaji', icon: Banknote, href: '/gaji' },
   ];
 
   return (
