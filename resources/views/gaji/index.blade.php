@@ -51,18 +51,18 @@
                         <h3 class="card-title">Riwayat Periode Penggajian</h3>
                     </div>
                     <div class="table-responsive">
-                        <table class="table table-vcenter card-table table-striped">
+                        <table class="table table-vcenter card-table table-striped" style="min-width: 1050px;">
                             <thead>
                                 <tr>
-                                    <th>Kode Periode</th>
-                                    <th>Nama Periode</th>
-                                    <th>Rentang Tanggal</th>
-                                    <th>Standar HK</th>
-                                    <th>Total Karyawan</th>
-                                    <th>Total Gaji (THP)</th>
-                                    <th>Status WA</th>
-                                    <th>Status</th>
-                                    <th class="w-1">Aksi</th>
+                                    <th style="min-width: 130px;">Kode Periode</th>
+                                    <th style="min-width: 180px;">Nama Periode</th>
+                                    <th style="min-width: 180px;">Rentang Tanggal</th>
+                                    <th style="min-width: 110px;">Standar HK</th>
+                                    <th style="min-width: 120px;">Total Karyawan</th>
+                                    <th style="min-width: 150px;">Total Gaji (THP)</th>
+                                    <th style="min-width: 130px;">Status WA</th>
+                                    <th style="min-width: 100px;">Status</th>
+                                    <th class="text-center" style="min-width: 150px;">Aksi</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -79,7 +79,7 @@
                                     </td>
                                     <td><span class="badge bg-secondary-lt">{{ $p->hk_standar }} Hari</span></td>
                                     <td><span class="badge bg-primary">{{ $p->total_karyawan }} Orang</span></td>
-                                    <td class="fw-bold text-success">
+                                    <td class="fw-bold text-success text-nowrap">
                                         Rp {{ number_format($p->total_gaji, 0, ',', '.') }}
                                     </td>
                                     <td>
@@ -98,7 +98,7 @@
                                             <span class="badge bg-warning">Draft</span>
                                         @endif
                                     </td>
-                                    <td>
+                                    <td class="text-center text-nowrap">
                                         <div class="btn-group">
                                             <a href="/gaji/periode/{{ $p->id }}" class="btn btn-sm btn-info" title="Lihat Detail Slip">
                                                 Buka Slip

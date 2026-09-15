@@ -137,17 +137,17 @@
         <!-- Slip Table -->
         <div class="card">
             <div class="table-responsive">
-                <table class="table table-vcenter card-table table-hover">
+                <table class="table table-vcenter card-table table-hover" style="min-width: 1250px;">
                     <thead>
                         <tr>
-                            <th>Karyawan & Jabatan</th>
-                            <th>Cabang</th>
-                            <th>Kehadiran (26 HK)</th>
-                            <th>Gaji Pokok</th>
-                            <th>Tunjangan & Bonus</th>
-                            <th>Potongan</th>
-                            <th>Gaji Bersih (THP)</th>
-                            <th>Status WA</th>
+                            <th style="min-width: 200px;">Karyawan & Jabatan</th>
+                            <th style="min-width: 140px;">Cabang / Dept</th>
+                            <th style="min-width: 150px;">Kehadiran (26 HK)</th>
+                            <th style="min-width: 130px;">Gaji Pokok</th>
+                            <th style="min-width: 160px;">Tunjangan & Bonus</th>
+                            <th style="min-width: 120px;">Potongan</th>
+                            <th style="min-width: 150px;">Gaji Bersih (THP)</th>
+                            <th style="min-width: 110px;">Status WA</th>
                             <th class="text-center" style="min-width: 220px;">Aksi</th>
                         </tr>
                     </thead>
@@ -168,21 +168,21 @@
                                     I:{{ $d->izin }} | S:{{ $d->sakit }} | A:{{ $d->alpha }} | Telat:{{ $d->terlambat_jam }}j
                                 </div>
                             </td>
-                            <td>Rp {{ number_format($d->gaji_pokok, 0, ',', '.') }}</td>
-                            <td>
+                            <td class="text-nowrap">Rp {{ number_format($d->gaji_pokok, 0, ',', '.') }}</td>
+                            <td class="text-nowrap">
                                 @php
                                     $totalTunj = ($d->total_penghasilan - $d->gaji_pokok);
                                 @endphp
                                 <span class="text-info">+Rp {{ number_format($totalTunj, 0, ',', '.') }}</span>
                             </td>
-                            <td>
+                            <td class="text-nowrap">
                                 @if ($d->total_potongan > 0)
                                     <span class="text-danger">-Rp {{ number_format($d->total_potongan, 0, ',', '.') }}</span>
                                 @else
                                     <span class="text-muted">Rp 0</span>
                                 @endif
                             </td>
-                            <td>
+                            <td class="text-nowrap">
                                 <div class="fw-bold text-success fs-3">
                                     Rp {{ number_format($d->gaji_bersih, 0, ',', '.') }}
                                 </div>
@@ -196,7 +196,7 @@
                                     <span class="badge bg-secondary-lt">Belum</span>
                                 @endif
                             </td>
-                            <td>
+                            <td class="text-center text-nowrap">
                                 <div class="btn-list flex-nowrap justify-content-center">
                                     {{-- Edit Superadmin --}}
                                     <a href="/gaji/edit/{{ $d->id }}" class="btn btn-sm btn-outline-primary" title="Edit Komponen Slip">
