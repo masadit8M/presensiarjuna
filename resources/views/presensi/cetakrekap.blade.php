@@ -114,6 +114,7 @@
                 <th rowspan="2">S</th>
                 <th rowspan="2">C</th>
                 <th rowspan="2">A</th>
+                <th rowspan="2" style="background:#d4edda; color:#155724;">Pagi<br>≤06:30</th>
             </tr>
             <tr>
                 @foreach ($rangetanggal as $d)
@@ -129,11 +130,12 @@
                     <td>{{ $r->nama_lengkap }}</td>
 
                     <?php
-                    $jml_hadir = 0;
-                    $jml_izin = 0;
-                    $jml_sakit = 0;
-                    $jml_cuti = 0;
-                    $jml_alpa = 0;
+                    $jml_hadir  = 0;
+                    $jml_izin   = 0;
+                    $jml_sakit  = 0;
+                    $jml_cuti   = 0;
+                    $jml_alpa   = 0;
+                    $jml_pagi_disiplin = 0;
                     $color = "";
                     for($i=1; $i<=$jmlhari; $i++){
                         $tgl = "tgl_".$i;
@@ -144,56 +146,72 @@
                         ];
                         $ceklibur = cekkaryawanlibur($datalibur, $search_items);
 
-                        $datapresensi = explode("|",$r->$tgl);
-                        if($r->$tgl != NULL){
+                        $datapresensi = explode("|", $r->$tgl);
+                        if ($r->$tgl != NULL) {
                             $status = $datapresensi[2];
-                        }else{
+                            $jamIn  = (!empty($datapresensi[0]) && $datapresensi[0] !== 'NA') ? $datapresensi[0] : '';
+                        } else {
                             $status = "";
+                            $jamIn  = "";
                         }
 
-                        $cekhari = gethari(date('D',strtotime($tgl_presensi)));
-                        if($status == "h"){
+                        $cekhari = gethari(date('D', strtotime($tgl_presensi)));
+                        if ($status == "h") {
                             $jml_hadir += 1;
                             $color = "white";
                         }
 
-                        if($status == "i"){
+                        if ($status == "i") {
                             $jml_izin += 1;
                             $color = "#ffbb00";
                         }
 
-                        if($status == "s"){
+                        if ($status == "s") {
                             $jml_sakit += 1;
                             $color = "#34a1eb";
                         }
 
-                        if($status == "c"){
+                        if ($status == "c") {
                             $jml_cuti += 1;
                             $color = "#a600ff";
                         }
 
 
-                        if(empty($status) && empty($ceklibur) && $cekhari != 'Minggu'){
+                        if (empty($status) && empty($ceklibur) && $cekhari != 'Minggu') {
                             $jml_alpa += 1;
                             $color = "red";
                         }
 
-                        if(!empty($ceklibur)){
+                        if (!empty($ceklibur)) {
                             $color = "green";
                         }
 
 
-                        if($cekhari == "Minggu"){
+                        if ($cekhari == "Minggu") {
                             $color = "orange";
                         }
 
-
-
-                ?>
-                    <td style="background-color: {{ $color }}">
-
-                        {{ $status }}
-
+                        // Jam In color & disiplin pagi counter
+                        $jamInDisplay = '';
+                        $jamInColor   = '#333';
+                        if (!empty($jamIn)) {
+                            $jamShort = substr($jamIn, 0, 5); // HH:MM
+                            $jamInDisplay = $jamShort;
+                            if ($jamShort <= '06:30') {
+                                $jamInColor = '#1a7a1a'; // hijau tua = disiplin pagi ✓
+                                $jml_pagi_disiplin += 1;
+                            } elseif ($jamShort <= '07:00') {
+                                $jamInColor = '#b35c00'; // coklat/orange = tepat waktu
+                            } else {
+                                $jamInColor = '#cc0000'; // merah = terlambat
+                            }
+                        }
+                    ?>
+                    <td style="background-color: {{ $color }}; text-align:center; padding:2px 3px; vertical-align:top;">
+                        <div style="font-weight:bold; font-size:11px;">{{ $status }}</div>
+                        @if (!empty($jamInDisplay))
+                            <div style="font-size:9px; color:{{ $jamInColor }}; font-weight:bold; line-height:1.2;">{{ $jamInDisplay }}</div>
+                        @endif
                     </td>
                     <?php
                     }
@@ -203,6 +221,9 @@
                     <td>{{ !empty($jml_sakit) ? $jml_sakit : '' }}</td>
                     <td>{{ !empty($jml_cuti) ? $jml_cuti : '' }}</td>
                     <td>{{ !empty($jml_alpa) ? $jml_alpa : '' }}</td>
+                    <td style="text-align:center; background:#d4edda; color:#155724; font-weight:bold;">
+                        {{ $jml_pagi_disiplin > 0 ? $jml_pagi_disiplin : '' }}
+                    </td>
                 </tr>
             @endforeach
         </table>
