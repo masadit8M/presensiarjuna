@@ -697,8 +697,32 @@ class PresensiController extends Controller
         $query->orderBy('nama_lengkap');
         $rekap = $query->get();
 
+        // If no specific branch is filtered, merge attendance for employees who have multiple branch NIKs
+        if (empty($kode_cabang)) {
+            $mergedRekap = collect();
+            $grouped = $rekap->groupBy(function ($item) {
+                return trim(strtoupper($item->nama_lengkap ?? ''));
+            });
 
-        //dd($rekap);
+            foreach ($grouped as $name => $items) {
+                if ($items->count() === 1) {
+                    $mergedRekap->push($items->first());
+                } else {
+                    $first = clone $items->first();
+                    for ($d = 1; $d <= $jmlhari; $d++) {
+                        $col = "tgl_" . $d;
+                        foreach ($items as $it) {
+                            if (!empty($it->$col) && !str_starts_with($it->$col, 'NA|NA|NA')) {
+                                $first->$col = $it->$col;
+                                break;
+                            }
+                        }
+                    }
+                    $mergedRekap->push($first);
+                }
+            }
+            $rekap = $mergedRekap;
+        }
         if (isset($_POST['exportexcel'])) {
             $time = date("d-M-Y H:i:s");
             // Fungsi header dengan mengirimkan raw data excel

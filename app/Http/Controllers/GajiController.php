@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Pagination\LengthAwarePaginator;
 
 class GajiController extends Controller
 {
@@ -186,13 +187,86 @@ class GajiController extends Controller
             'updated_at' => now(),
         ]);
 
-        // Pull active karyawan
-        $karyawanList = DB::table('karyawan')->get();
-        $hkStandar = $request->hk_standar ?? 26;
+        $totalGenerated = $this->generateDetailsForPeriod(
+            $periodeId,
+            $request->tgl_mulai,
+            $request->tgl_selesai,
+            $request->hk_standar ?? 26,
+            $request->total_siswa_tpa ?? 0
+        );
 
-        foreach ($karyawanList as $k) {
-            // Get master salary if configured
-            $master = DB::table('gaji_master')->where('nik', $k->nik)->first();
+        return redirect('/gaji/periode/' . $periodeId)->with(['success' => 'Penggajian periode ' . $namaPeriode . ' berhasil digenerate untuk ' . $totalGenerated . ' karyawan (1 slip per nama karyawan)!']);
+    }
+
+    /**
+     * Re-calculate and regenerate attendance slips for an existing period.
+     */
+    public function regeneratePeriode($id)
+    {
+        $this->ensureTablesExist();
+
+        $periode = DB::table('penggajian_periode')->where('id', $id)->first();
+        if (!$periode) {
+            return redirect('/gaji')->with(['warning' => 'Periode tidak ditemukan']);
+        }
+
+        // Delete previous details for this period
+        DB::table('penggajian_detail')->where('periode_id', $id)->delete();
+
+        // Re-generate using unified single-person logic
+        $totalGenerated = $this->generateDetailsForPeriod(
+            $id,
+            $periode->tgl_mulai,
+            $periode->tgl_selesai,
+            $periode->hk_standar,
+            $periode->total_siswa_tpa
+        );
+
+        return redirect('/gaji/periode/' . $id)->with(['success' => 'Presensi dan slip gaji berhasil dihitung ulang dan dikonsolidasikan (1 slip per nama) untuk ' . $totalGenerated . ' karyawan!']);
+    }
+
+    /**
+     * Generate payroll details for a period with multi-branch / multi-NIK consolidation per person.
+     */
+    private function generateDetailsForPeriod($periodeId, $tglMulai, $tglSelesai, $hkStandar = 26, $totalSiswaTpa = 0)
+    {
+        // Pull active karyawan and group by normalized nama_lengkap
+        $allKaryawan = DB::table('karyawan')->orderBy('nama_lengkap', 'asc')->get();
+
+        $groupedKaryawan = [];
+        foreach ($allKaryawan as $k) {
+            $normName = trim(strtoupper($k->nama_lengkap ?? ''));
+            if (empty($normName)) continue;
+
+            if (!isset($groupedKaryawan[$normName])) {
+                $groupedKaryawan[$normName] = [
+                    'primary' => $k,
+                    'all_niks' => [$k->nik],
+                    'all_cabang' => !empty($k->kode_cabang) ? [$k->kode_cabang] : [],
+                ];
+            } else {
+                $groupedKaryawan[$normName]['all_niks'][] = $k->nik;
+                if (!empty($k->kode_cabang) && !in_array($k->kode_cabang, $groupedKaryawan[$normName]['all_cabang'])) {
+                    $groupedKaryawan[$normName]['all_cabang'][] = $k->kode_cabang;
+                }
+            }
+        }
+
+        $totalGenerated = 0;
+
+        foreach ($groupedKaryawan as $normName => $personData) {
+            $k = $personData['primary'];
+            $personNiks = array_values(array_unique($personData['all_niks']));
+
+            // Master salary: look for any master entry across all their NIKs that has gaji_pokok > 0
+            $master = DB::table('gaji_master')
+                ->whereIn('nik', $personNiks)
+                ->where('gaji_pokok', '>', 0)
+                ->first();
+
+            if (!$master) {
+                $master = DB::table('gaji_master')->whereIn('nik', $personNiks)->first();
+            }
 
             $gapok = $master ? $master->gaji_pokok : 1200000;
             $tunjTransport = $master ? $master->tunjangan_transportasi : 150000;
@@ -203,30 +277,30 @@ class GajiController extends Controller
             $honorEkskul = $master ? $master->tarif_ekskul : 0;
             $upahLembur = $master ? $master->tarif_lembur : 0;
 
-            // Attendance calculation from presensi table
+            // Attendance calculation from presensi table across ALL branch NIKs of this employee
             $presensiData = DB::table('presensi')
-                ->where('nik', $k->nik)
-                ->whereBetween('tgl_presensi', [$request->tgl_mulai, $request->tgl_selesai])
+                ->whereIn('nik', $personNiks)
+                ->whereBetween('tgl_presensi', [$tglMulai, $tglSelesai])
                 ->get();
 
-            $hadir = 0;
-            $izin = 0;
-            $sakit = 0;
-            $alpha = 0;
-            $totalJamTerlambat = 0;
-            $hadirPagiDisiplin = 0; // Datang sebelum 06.30 untuk Bunda TPA
+            $hadirDates = [];
+            $izinDates = [];
+            $sakitDates = [];
+            $alphaDates = [];
+            $telatByDate = [];
+            $hadirPagiDisiplinDates = [];
 
             foreach ($presensiData as $p) {
+                $tgl = $p->tgl_presensi;
                 if ($p->status == 'h' || !empty($p->jam_in)) {
-                    $hadir++;
+                    $hadirDates[$tgl] = true;
 
                     // Disiplin pagi check (06:30)
                     if (!empty($p->jam_in) && date('H:i', strtotime($p->jam_in)) <= '06:30') {
-                        $hadirPagiDisiplin++;
+                        $hadirPagiDisiplinDates[$tgl] = true;
                     }
 
                     // Terlambat check
-                    // Ambil jam masuk standar jika ada
                     $jamMasukJadwal = "07:00:00";
                     if (!empty($p->kode_jam_kerja)) {
                         $jk = DB::table('jam_kerja')->where('kode_jam_kerja', $p->kode_jam_kerja)->first();
@@ -239,24 +313,44 @@ class GajiController extends Controller
                         $diff = strtotime($p->jam_in) - strtotime($jamMasukJadwal);
                         $jamTelat = floor($diff / 3600);
                         $menitTelat = floor(($diff % 3600) / 60);
-                        $totalJamTerlambat += ($jamTelat + round($menitTelat / 60, 2));
+                        $telatHours = ($jamTelat + round($menitTelat / 60, 2));
+                        if (!isset($telatByDate[$tgl]) || $telatHours < $telatByDate[$tgl]) {
+                            $telatByDate[$tgl] = $telatHours;
+                        }
+                    } else {
+                        $telatByDate[$tgl] = 0;
                     }
                 } elseif ($p->status == 'i') {
-                    $izin++;
+                    $izinDates[$tgl] = true;
                 } elseif ($p->status == 's') {
-                    $sakit++;
+                    $sakitDates[$tgl] = true;
                 } elseif ($p->status == 'a') {
-                    $alpha++;
+                    $alphaDates[$tgl] = true;
                 }
             }
 
-            // Calculate alpha if total presence records is less than HK and no explicit permission
+            $hadir = count($hadirDates);
+            // Clean up: date marked hadir cannot be counted as izin/sakit/alpha
+            foreach (array_keys($hadirDates) as $d) {
+                unset($izinDates[$d], $sakitDates[$d], $alphaDates[$d]);
+            }
+            $izin = count($izinDates);
+            foreach (array_keys($izinDates) as $d) {
+                unset($sakitDates[$d], $alphaDates[$d]);
+            }
+            $sakit = count($sakitDates);
+            foreach (array_keys($sakitDates) as $d) {
+                unset($alphaDates[$d]);
+            }
+            $alpha = count($alphaDates);
+            $totalJamTerlambat = array_sum($telatByDate);
+            $hadirPagiDisiplin = count($hadirPagiDisiplinDates);
+
+            // Calculate alpha if total presence records is less than HK and period has ended
             $totalDicatat = $hadir + $izin + $sakit + $alpha;
             if ($totalDicatat < $hkStandar) {
-                // If it's a new or mid-month calculation, difference can be treated as alpha or unrecorded
                 $selisih = $hkStandar - $totalDicatat;
-                // Only count as alpha if requested date range has passed
-                if (strtotime($request->tgl_selesai) <= time()) {
+                if (strtotime($tglSelesai) <= time()) {
                     $alpha += $selisih;
                 }
             }
@@ -280,14 +374,16 @@ class GajiController extends Controller
             $insentifPoolTpa = 0;
             $rewardDisiplin = 0;
 
-            // Jika TPA dan siswa >= 41 (Pool Gate 41)
-            $isTpa = str_contains(strtoupper($k->jabatan ?? ''), 'TPA') || str_contains(strtoupper($k->kode_dept ?? ''), 'TPA');
+            $isTpa = str_contains(strtoupper($k->jabatan ?? ''), 'TPA') 
+                  || str_contains(strtoupper($k->kode_dept ?? ''), 'TPA')
+                  || str_contains(strtoupper($k->jabatan ?? ''), 'DAYCARE');
+
             if ($isTpa) {
-                if (($request->total_siswa_tpa ?? 0) >= 41) {
-                    $insentifPoolTpa = 150000; // Bonus pool gate 41
+                if ($totalSiswaTpa >= 41) {
+                    $insentifPoolTpa = 150000;
                 }
                 if ($hadirPagiDisiplin >= 15) {
-                    $rewardDisiplin = 50000; // Reward konsistensi disiplin 06.30
+                    $rewardDisiplin = 50000;
                 }
             }
 
@@ -331,9 +427,11 @@ class GajiController extends Controller
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
+
+            $totalGenerated++;
         }
 
-        return redirect('/gaji/periode/' . $periodeId)->with(['success' => 'Penggajian periode ' . $namaPeriode . ' berhasil digenerate untuk ' . count($karyawanList) . ' karyawan!']);
+        return $totalGenerated;
     }
 
     /**
@@ -924,7 +1022,7 @@ class GajiController extends Controller
         // Auto sync if any master record is missing or zero
         $this->syncMasterFromExcelStandards(false);
 
-        $query = DB::table('karyawan')
+        $allKaryawan = DB::table('karyawan')
             ->leftJoin('gaji_master', 'karyawan.nik', '=', 'gaji_master.nik')
             ->leftJoin('cabang', 'karyawan.kode_cabang', '=', 'cabang.kode_cabang')
             ->leftJoin('departemen', 'karyawan.kode_dept', '=', 'departemen.kode_dept')
@@ -948,21 +1046,90 @@ class GajiController extends Controller
                 'gaji_master.bpjs_kesehatan',
                 'gaji_master.potongan_lainnya'
             )
-            ->orderBy('karyawan.nama_lengkap', 'asc');
+            ->orderBy('karyawan.nama_lengkap', 'asc')
+            ->get();
 
-        if ($request->kode_cabang) {
-            $query->where('karyawan.kode_cabang', $request->kode_cabang);
+        // Group by normalized nama_lengkap to eliminate duplicate entries for employees with multiple branch NIKs
+        $grouped = [];
+        foreach ($allKaryawan as $row) {
+            $normName = trim(strtoupper($row->nama_lengkap ?? ''));
+            if (empty($normName)) continue;
+
+            $branchName = !empty($row->nama_cabang) ? $row->nama_cabang : (!empty($row->kode_cabang) ? $row->kode_cabang : null);
+
+            if (!isset($grouped[$normName])) {
+                $grouped[$normName] = [
+                    'primary' => clone $row,
+                    'all_niks' => [$row->nik],
+                    'all_cabang' => $branchName ? [$branchName] : [],
+                    'all_kode_cabang' => !empty($row->kode_cabang) ? [$row->kode_cabang] : [],
+                    'all_kode_dept' => !empty($row->kode_dept) ? [$row->kode_dept] : [],
+                ];
+            } else {
+                $grouped[$normName]['all_niks'][] = $row->nik;
+                if ($branchName && !in_array($branchName, $grouped[$normName]['all_cabang'])) {
+                    $grouped[$normName]['all_cabang'][] = $branchName;
+                }
+                if (!empty($row->kode_cabang) && !in_array($row->kode_cabang, $grouped[$normName]['all_kode_cabang'])) {
+                    $grouped[$normName]['all_kode_cabang'][] = $row->kode_cabang;
+                }
+                if (!empty($row->kode_dept) && !in_array($row->kode_dept, $grouped[$normName]['all_kode_dept'])) {
+                    $grouped[$normName]['all_kode_dept'][] = $row->kode_dept;
+                }
+
+                // If secondary entry has configured master salary while primary doesn't, inherit master data
+                if (($row->gaji_pokok ?? 0) > 0 && ($grouped[$normName]['primary']->gaji_pokok ?? 0) <= 0) {
+                    $grouped[$normName]['primary']->master_id = $row->master_id;
+                    $grouped[$normName]['primary']->gaji_pokok = $row->gaji_pokok;
+                    $grouped[$normName]['primary']->tunjangan_transportasi = $row->tunjangan_transportasi;
+                    $grouped[$normName]['primary']->tunjangan_jabatan = $row->tunjangan_jabatan;
+                    $grouped[$normName]['primary']->tunjangan_konsumsi = $row->tunjangan_konsumsi;
+                    $grouped[$normName]['primary']->tarif_honor_kegiatan = $row->tarif_honor_kegiatan;
+                    $grouped[$normName]['primary']->tarif_ekskul = $row->tarif_ekskul;
+                    $grouped[$normName]['primary']->tarif_lembur = $row->tarif_lembur;
+                    $grouped[$normName]['primary']->potongan_kasbon = $row->potongan_kasbon;
+                    $grouped[$normName]['primary']->bpjs_kesehatan = $row->bpjs_kesehatan;
+                    $grouped[$normName]['primary']->potongan_lainnya = $row->potongan_lainnya;
+                }
+            }
         }
 
-        if ($request->kode_dept) {
-            $query->where('karyawan.kode_dept', $request->kode_dept);
+        // Build filtered single-entry collection
+        $filteredList = collect();
+        foreach ($grouped as $normName => $data) {
+            $item = $data['primary'];
+            $allNiks = array_values(array_unique($data['all_niks']));
+            $item->all_niks = $allNiks;
+            $item->alt_niks = array_values(array_diff($allNiks, [$item->nik]));
+            $item->all_cabang = $data['all_cabang'];
+
+            // Filter kode_cabang: match if employee belongs to the branch on ANY of their NIKs
+            if ($request->kode_cabang && !in_array($request->kode_cabang, $data['all_kode_cabang'])) {
+                continue;
+            }
+
+            // Filter kode_dept: match if employee belongs to dept on ANY of their NIKs
+            if ($request->kode_dept && !in_array($request->kode_dept, $data['all_kode_dept'])) {
+                continue;
+            }
+
+            // Filter search nama_karyawan
+            if ($request->nama_karyawan && stripos($item->nama_lengkap, $request->nama_karyawan) === false) {
+                continue;
+            }
+
+            $filteredList->push($item);
         }
 
-        if ($request->nama_karyawan) {
-            $query->where('karyawan.nama_lengkap', 'like', '%' . $request->nama_karyawan . '%');
-        }
+        // Paginate unique employees collection
+        $page = LengthAwarePaginator::resolveCurrentPage() ?: 1;
+        $perPage = 15;
+        $currentPageItems = $filteredList->slice(($page - 1) * $perPage, $perPage)->values();
+        $karyawan = new LengthAwarePaginator($currentPageItems, $filteredList->count(), $perPage, $page, [
+            'path' => LengthAwarePaginator::resolveCurrentPath(),
+            'query' => $request->query(),
+        ]);
 
-        $karyawan = $query->paginate(15);
         $cabang = DB::table('cabang')->orderBy('nama_cabang')->get();
         $departemen = DB::table('departemen')->orderBy('nama_dept')->get();
 
@@ -970,7 +1137,7 @@ class GajiController extends Controller
     }
 
     /**
-     * Update Master Gaji for a specific employee.
+     * Update Master Gaji for an employee (and synchronize across all their branch NIKs).
      */
     public function updateMaster(Request $request, $nik)
     {
@@ -987,39 +1154,52 @@ class GajiController extends Controller
         $bpjsKesehatan = str_replace(['.', ','], '', $request->bpjs_kesehatan ?? 0);
         $potonganLainnya = str_replace(['.', ','], '', $request->potongan_lainnya ?? 0);
 
-        $exists = DB::table('gaji_master')->where('nik', $nik)->first();
-        if ($exists) {
-            DB::table('gaji_master')->where('nik', $nik)->update([
-                'gaji_pokok' => $gapok,
-                'tunjangan_transportasi' => $tunjTransport,
-                'tunjangan_jabatan' => $tunjJabatan,
-                'tunjangan_konsumsi' => $tunjKonsumsi,
-                'tarif_honor_kegiatan' => $honorKegiatan,
-                'tarif_ekskul' => $honorEkskul,
-                'tarif_lembur' => $upahLembur,
-                'potongan_kasbon' => $potonganKasbon,
-                'bpjs_kesehatan' => $bpjsKesehatan,
-                'potongan_lainnya' => $potonganLainnya,
-                'updated_at' => now(),
-            ]);
-        } else {
-            DB::table('gaji_master')->insert([
-                'nik' => $nik,
-                'gaji_pokok' => $gapok,
-                'tunjangan_transportasi' => $tunjTransport,
-                'tunjangan_jabatan' => $tunjJabatan,
-                'tunjangan_konsumsi' => $tunjKonsumsi,
-                'tarif_honor_kegiatan' => $honorKegiatan,
-                'tarif_ekskul' => $honorEkskul,
-                'tarif_lembur' => $upahLembur,
-                'potongan_kasbon' => $potonganKasbon,
-                'bpjs_kesehatan' => $bpjsKesehatan,
-                'potongan_lainnya' => $potonganLainnya,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+        // Find all NIKs associated with this person
+        $currentKaryawan = DB::table('karyawan')->where('nik', $nik)->first();
+        $allNiks = [$nik];
+        if ($currentKaryawan && !empty($currentKaryawan->nama_lengkap)) {
+            $allNiks = DB::table('karyawan')
+                ->whereRaw('TRIM(UPPER(nama_lengkap)) = ?', [trim(strtoupper($currentKaryawan->nama_lengkap))])
+                ->pluck('nik')
+                ->toArray();
         }
 
-        return redirect()->back()->with(['success' => 'Master standar gaji & potongan karyawan ' . $nik . ' berhasil diperbarui!']);
+        foreach ($allNiks as $targetNik) {
+            $exists = DB::table('gaji_master')->where('nik', $targetNik)->first();
+            if ($exists) {
+                DB::table('gaji_master')->where('nik', $targetNik)->update([
+                    'gaji_pokok' => $gapok,
+                    'tunjangan_transportasi' => $tunjTransport,
+                    'tunjangan_jabatan' => $tunjJabatan,
+                    'tunjangan_konsumsi' => $tunjKonsumsi,
+                    'tarif_honor_kegiatan' => $honorKegiatan,
+                    'tarif_ekskul' => $honorEkskul,
+                    'tarif_lembur' => $upahLembur,
+                    'potongan_kasbon' => $potonganKasbon,
+                    'bpjs_kesehatan' => $bpjsKesehatan,
+                    'potongan_lainnya' => $potonganLainnya,
+                    'updated_at' => now(),
+                ]);
+            } else {
+                DB::table('gaji_master')->insert([
+                    'nik' => $targetNik,
+                    'gaji_pokok' => $gapok,
+                    'tunjangan_transportasi' => $tunjTransport,
+                    'tunjangan_jabatan' => $tunjJabatan,
+                    'tunjangan_konsumsi' => $tunjKonsumsi,
+                    'tarif_honor_kegiatan' => $honorKegiatan,
+                    'tarif_ekskul' => $honorEkskul,
+                    'tarif_lembur' => $upahLembur,
+                    'potongan_kasbon' => $potonganKasbon,
+                    'bpjs_kesehatan' => $bpjsKesehatan,
+                    'potongan_lainnya' => $potonganLainnya,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+        }
+
+        $nama = $currentKaryawan ? $currentKaryawan->nama_lengkap : $nik;
+        return redirect()->back()->with(['success' => 'Master standar gaji & potongan untuk ' . $nama . ' berhasil diperbarui untuk seluruh cabang penugasan!']);
     }
 }

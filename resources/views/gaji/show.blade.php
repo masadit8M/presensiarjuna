@@ -23,6 +23,13 @@
                         <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-arrow-left" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l14 0"/><path d="M5 12l6 6"/><path d="M5 12l6 -6"/></svg>
                         Kembali
                     </a>
+                    <form action="/gaji/periode/{{ $periode->id }}/regenerate" method="POST" onsubmit="return confirm('Hitung ulang presensi periode ini? Seluruh data kehadiran akan dikonsolidasikan ulang 1 slip per nama karyawan.')">
+                        @csrf
+                        <button type="submit" class="btn btn-outline-primary">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-refresh" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -5v5h5"/><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 5v-5h-5"/></svg>
+                            Hitung Ulang Presensi (1 Nama)
+                        </button>
+                    </form>
                     <form action="/gaji/kirimwa-semua/{{ $periode->id }}" method="POST" onsubmit="return confirm('Kirimkan dokumen PDF Slip Gaji ke SELURUH karyawan melalui WhatsApp?')">
                         @csrf
                         <button type="submit" class="btn btn-success">

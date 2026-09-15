@@ -99,11 +99,22 @@
                         <tr>
                             <td>
                                 <div class="fw-bold">{{ $k->nama_lengkap }}</div>
-                                <div class="text-muted small">NIK: {{ $k->nik }}</div>
+                                <div class="text-muted small">
+                                    NIK: {{ $k->nik }}
+                                    @if (!empty($k->alt_niks) && count($k->alt_niks) > 0)
+                                        <span class="badge bg-secondary-lt ms-1" title="NIK Cabang Lain">Alt: {{ implode(', ', $k->alt_niks) }}</span>
+                                    @endif
+                                </div>
                             </td>
                             <td>{{ $k->jabatan ?? '-' }}</td>
                             <td>
-                                <span class="badge bg-blue-lt">{{ $k->nama_cabang ?? $k->kode_cabang }}</span>
+                                @if (!empty($k->all_cabang) && count($k->all_cabang) > 1)
+                                    @foreach ($k->all_cabang as $cb)
+                                        <span class="badge bg-blue-lt me-1">{{ $cb }}</span>
+                                    @endforeach
+                                @else
+                                    <span class="badge bg-blue-lt">{{ $k->nama_cabang ?? $k->kode_cabang }}</span>
+                                @endif
                                 <div class="text-muted small">{{ $k->nama_dept ?? $k->kode_dept }}</div>
                             </td>
                             <td class="fw-bold text-nowrap text-primary">
@@ -157,7 +168,10 @@
                     <form action="/gaji/master/{{ $k->nik }}/update" method="POST">
                         @csrf
                         <div class="modal-header">
-                            <h5 class="modal-title">Setting Master Gaji: {{ $k->nama_lengkap }}</h5>
+                            <div>
+                                <h5 class="modal-title mb-0">Setting Master Gaji: {{ $k->nama_lengkap }}</h5>
+                                <div class="text-muted small">NIK Utama: {{ $k->nik }} @if(!empty($k->alt_niks)) | NIK Lain: {{ implode(', ', $k->alt_niks) }} @endif</div>
+                            </div>
                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
                         <div class="modal-body">
@@ -236,6 +250,10 @@
                                     <span class="input-group-text">Rp</span>
                                     <input type="number" name="potongan_lainnya" class="form-control" value="{{ round($k->potongan_lainnya ?? 0) }}" placeholder="0">
                                 </div>
+                            </div>
+
+                            <div class="alert alert-info py-2 small mb-0 mt-3">
+                                <strong>Info Konsolidasi:</strong> Standar gaji ini otomatis diterapkan untuk seluruh cabang penugasan karyawan ini (@if(!empty($k->all_cabang)){{ implode(', ', $k->all_cabang) }}@endif).
                             </div>
                         </div>
                         <div class="modal-footer">

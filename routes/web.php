@@ -138,6 +138,7 @@ Route::group(['middleware' => ['role:administrator|admin departemen,user']], fun
     Route::post('/gaji/update/{id}', [GajiController::class, 'updateDetail']);
     Route::post('/gaji/delete/{id}', [GajiController::class, 'deleteDetail']);
     Route::post('/gaji/periode/{id}/delete', [GajiController::class, 'deletePeriode']);
+    Route::post('/gaji/periode/{id}/regenerate', [GajiController::class, 'regeneratePeriode']);
     Route::get('/gaji/cetak/{id}', [GajiController::class, 'cetakSlip']);
     Route::get('/gaji/download-pdf/{id}', [GajiController::class, 'downloadPdf']);
     Route::post('/gaji/kirimwa/{id}', [GajiController::class, 'kirimWa']);
