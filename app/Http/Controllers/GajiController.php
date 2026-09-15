@@ -39,8 +39,21 @@ class GajiController extends Controller
                 $table->decimal('tarif_lembur', 12, 2)->default(0);
                 $table->decimal('bpjs_kesehatan', 12, 2)->default(0);
                 $table->decimal('bpjs_ketenagakerjaan', 12, 2)->default(0);
+                $table->decimal('potongan_kasbon', 12, 2)->default(0);
+                $table->decimal('potongan_lainnya', 12, 2)->default(0);
                 $table->timestamps();
             });
+        } else {
+            if (!Schema::hasColumn('gaji_master', 'potongan_kasbon')) {
+                Schema::table('gaji_master', function (Blueprint $table) {
+                    $table->decimal('potongan_kasbon', 12, 2)->default(0)->after('bpjs_ketenagakerjaan');
+                });
+            }
+            if (!Schema::hasColumn('gaji_master', 'potongan_lainnya')) {
+                Schema::table('gaji_master', function (Blueprint $table) {
+                    $table->decimal('potongan_lainnya', 12, 2)->default(0)->after('potongan_kasbon');
+                });
+            }
         }
 
         if (!Schema::hasTable('penggajian_periode')) {
@@ -248,10 +261,16 @@ class GajiController extends Controller
                 }
             }
 
-            // FORMULA STANDAR 26 HARI KERJA
-            // Gaji Harian = Gaji Pokok / 26
-            // Gaji Per Jam = Gaji Harian / 10
-            $gajiHarian = $hkStandar > 0 ? ($gapok / $hkStandar) : 0;
+            $potonganKasbon = $master ? ($master->potongan_kasbon ?? 0) : 0;
+            $potonganBpjs = $master ? (($master->bpjs_kesehatan ?? 0) + ($master->bpjs_ketenagakerjaan ?? 0)) : 0;
+            $potonganLainnya = $master ? ($master->potongan_lainnya ?? 0) : 0;
+
+            // FORMULA STANDAR 26 HARI KERJA (SESUAI EXCEL ARJUNA)
+            // Gaji Basis Harian = Gaji Pokok + Tunjangan Transportasi
+            // Gaji Harian = Gaji Basis Harian / 26 HK
+            // Gaji Per Jam = Gaji Harian / 10 Jam
+            $gajiBasisHarian = ($gapok + $tunjTransport);
+            $gajiHarian = $hkStandar > 0 ? ($gajiBasisHarian / $hkStandar) : 0;
             $gajiPerJam = $gajiHarian > 0 ? ($gajiHarian / 10) : 0;
 
             $potonganAbsen = round(($izin + $alpha) * $gajiHarian, 0);
@@ -273,7 +292,7 @@ class GajiController extends Controller
             }
 
             $totalPenghasilan = $gapok + $tunjTransport + $tunjJabatan + $tunjKonsumsi + $tunjKehadiran + $honorKegiatan + $honorEkskul + $upahLembur + $insentifPoolTpa + $rewardDisiplin;
-            $totalPotongan = $potonganAbsen + $potonganTerlambat;
+            $totalPotongan = $potonganAbsen + $potonganTerlambat + $potonganKasbon + $potonganBpjs + $potonganLainnya;
             $gajiBersih = max(0, $totalPenghasilan - $totalPotongan);
 
             DB::table('penggajian_detail')->insert([
@@ -302,9 +321,9 @@ class GajiController extends Controller
                 'bonus_tambahan' => 0,
                 'potongan_absen' => $potonganAbsen,
                 'potongan_terlambat' => $potonganTerlambat,
-                'potongan_kasbon' => 0,
-                'potongan_bpjs' => 0,
-                'potongan_lainnya' => 0,
+                'potongan_kasbon' => $potonganKasbon,
+                'potongan_bpjs' => $potonganBpjs,
+                'potongan_lainnya' => $potonganLainnya,
                 'total_penghasilan' => $totalPenghasilan,
                 'total_potongan' => $totalPotongan,
                 'gaji_bersih' => $gajiBersih,
@@ -666,11 +685,244 @@ class GajiController extends Controller
     }
 
     /**
+     * Standards extracted directly from official documents:
+     * 1. LAP. KB PAUD ARJUNA 2026-2027.xls (KB & TK Citandui & Langsep)
+     * 2. LAP.KEU 2026.xlsx (TPA / Daycare Citandui & Langsep)
+     */
+    private function getExcelSalaryStandards()
+    {
+        return [
+            // --- GURU KB & TK CABANG CITANDUI & LANGSEP ---
+            'CLARISTA' => [
+                'gaji_pokok' => 689000,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 0,
+            ],
+            'DWI RETNO' => [
+                'gaji_pokok' => 1011240,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 400000, // Dari Excel: PINJAMAN 4X(2JT)
+            ],
+            'MERINDA' => [
+                'gaji_pokok' => 1004880,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 0,
+            ],
+            'TITIN HAMIDAH' => [
+                'gaji_pokok' => 1067420,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 200000, // Dari Excel: Uang Ekstra/Tunj. KB
+                'potongan_kasbon' => 0,
+            ],
+            'ULUM KHUSNATIN' => [
+                'gaji_pokok' => 898880,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 0,
+            ],
+            'ERIN' => [ // Cocok dengan ERIN WIDAYANTI & ERIN WIDAYATI
+                'gaji_pokok' => 730340,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 0,
+            ],
+            'RIZKA ALFIANTI' => [
+                'gaji_pokok' => 1067420,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 0,
+            ],
+            'ROSHELLA' => [
+                'gaji_pokok' => 1573040,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 0,
+            ],
+            'ALEXANDRA' => [
+                'gaji_pokok' => 400000,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 0,
+            ],
+            'ANANDA LAILA' => [
+                'gaji_pokok' => 400000,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 0,
+            ],
+            'KARTIKA' => [
+                'gaji_pokok' => 1700000,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 0,
+            ],
+
+            // --- STAFF TPA / DAYCARE ---
+            'CINDY NOVALITA' => [
+                'gaji_pokok' => 2650000,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 200000, // Dari Excel: Pinjaman 1x(2jt)
+            ],
+            'MAHDALENA' => [
+                'gaji_pokok' => 2173000,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 0,
+            ],
+            'KASYATI' => [
+                'gaji_pokok' => 1700000,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 0,
+            ],
+            'MILYAS' => [
+                'gaji_pokok' => 1378000,
+                'tunjangan_transportasi' => 200000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 0,
+            ],
+            'ANGGITA DARA' => [
+                'gaji_pokok' => 1350000,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 0,
+            ],
+            'YUYUS' => [
+                'gaji_pokok' => 1350000,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 0,
+            ],
+            'ATIK CAHYANINGRUM' => [
+                'gaji_pokok' => 1219000,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 0,
+            ],
+            'SETYO ARINI' => [
+                'gaji_pokok' => 1166000,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 0,
+            ],
+            'NOVI RAHMA' => [
+                'gaji_pokok' => 1160000,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 0,
+            ],
+            'CICIK TRIYA' => [
+                'gaji_pokok' => 1050000,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 0,
+            ],
+            'FEBRIANA' => [
+                'gaji_pokok' => 1050000,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 0,
+            ],
+            'METY FARIDA' => [
+                'gaji_pokok' => 1000000,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 0,
+            ],
+            'NAILA DHINI' => [
+                'gaji_pokok' => 901000,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 0,
+            ],
+            'FITRI FADILATUL' => [
+                'gaji_pokok' => 901000,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 0,
+            ],
+            'MARISA DINADA' => [
+                'gaji_pokok' => 901000,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 0,
+            ],
+            'HENI RAHMAWATI' => [
+                'gaji_pokok' => 901000,
+                'tunjangan_transportasi' => 150000,
+                'tunjangan_jabatan' => 0,
+                'potongan_kasbon' => 0,
+            ],
+        ];
+    }
+
+    /**
+     * Synchronize Master Gaji standards from Excel dictionary.
+     */
+    private function syncMasterFromExcelStandards($force = false)
+    {
+        $standards = $this->getExcelSalaryStandards();
+        $karyawanList = DB::table('karyawan')->get();
+
+        foreach ($karyawanList as $k) {
+            $namaUpper = strtoupper($k->nama_lengkap ?? '');
+            $matched = null;
+
+            foreach ($standards as $key => $vals) {
+                if (str_contains($namaUpper, $key)) {
+                    $matched = $vals;
+                    break;
+                }
+            }
+
+            if ($matched) {
+                $master = DB::table('gaji_master')->where('nik', $k->nik)->first();
+                if (!$master) {
+                    DB::table('gaji_master')->insert([
+                        'nik' => $k->nik,
+                        'gaji_pokok' => $matched['gaji_pokok'],
+                        'tunjangan_transportasi' => $matched['tunjangan_transportasi'],
+                        'tunjangan_jabatan' => $matched['tunjangan_jabatan'] ?? 0,
+                        'potongan_kasbon' => $matched['potongan_kasbon'] ?? 0,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                } elseif ($force || $master->gaji_pokok <= 0 || $master->gaji_pokok == 1200000) {
+                    DB::table('gaji_master')->where('nik', $k->nik)->update([
+                        'gaji_pokok' => $matched['gaji_pokok'],
+                        'tunjangan_transportasi' => $matched['tunjangan_transportasi'],
+                        'tunjangan_jabatan' => $matched['tunjangan_jabatan'] ?? 0,
+                        'potongan_kasbon' => $matched['potongan_kasbon'] ?? 0,
+                        'updated_at' => now(),
+                    ]);
+                }
+            }
+        }
+    }
+
+    /**
+     * User-triggered action to synchronize master standards from Excel.
+     */
+    public function syncMasterExcel()
+    {
+        $this->ensureTablesExist();
+        $this->syncMasterFromExcelStandards(true);
+        return redirect('/gaji/master')->with(['success' => 'Standar Gaji Pokok, Tunjangan, & Potongan Kasbon seluruh Guru KB/TK dan Staff TPA berhasil disinkronkan dari Excel!']);
+    }
+
+    /**
      * Manage Master Gaji per employee.
      */
     public function master(Request $request)
     {
         $this->ensureTablesExist();
+
+        // Auto sync if any master record is missing or zero
+        $this->syncMasterFromExcelStandards(false);
 
         $query = DB::table('karyawan')
             ->leftJoin('gaji_master', 'karyawan.nik', '=', 'gaji_master.nik')
@@ -691,7 +943,10 @@ class GajiController extends Controller
                 'gaji_master.tunjangan_konsumsi',
                 'gaji_master.tarif_honor_kegiatan',
                 'gaji_master.tarif_ekskul',
-                'gaji_master.tarif_lembur'
+                'gaji_master.tarif_lembur',
+                'gaji_master.potongan_kasbon',
+                'gaji_master.bpjs_kesehatan',
+                'gaji_master.potongan_lainnya'
             )
             ->orderBy('karyawan.nama_lengkap', 'asc');
 
@@ -728,6 +983,9 @@ class GajiController extends Controller
         $honorKegiatan = str_replace(['.', ','], '', $request->tarif_honor_kegiatan ?? 0);
         $honorEkskul = str_replace(['.', ','], '', $request->tarif_ekskul ?? 0);
         $upahLembur = str_replace(['.', ','], '', $request->tarif_lembur ?? 0);
+        $potonganKasbon = str_replace(['.', ','], '', $request->potongan_kasbon ?? 0);
+        $bpjsKesehatan = str_replace(['.', ','], '', $request->bpjs_kesehatan ?? 0);
+        $potonganLainnya = str_replace(['.', ','], '', $request->potongan_lainnya ?? 0);
 
         $exists = DB::table('gaji_master')->where('nik', $nik)->first();
         if ($exists) {
@@ -739,6 +997,9 @@ class GajiController extends Controller
                 'tarif_honor_kegiatan' => $honorKegiatan,
                 'tarif_ekskul' => $honorEkskul,
                 'tarif_lembur' => $upahLembur,
+                'potongan_kasbon' => $potonganKasbon,
+                'bpjs_kesehatan' => $bpjsKesehatan,
+                'potongan_lainnya' => $potonganLainnya,
                 'updated_at' => now(),
             ]);
         } else {
@@ -751,11 +1012,14 @@ class GajiController extends Controller
                 'tarif_honor_kegiatan' => $honorKegiatan,
                 'tarif_ekskul' => $honorEkskul,
                 'tarif_lembur' => $upahLembur,
+                'potongan_kasbon' => $potonganKasbon,
+                'bpjs_kesehatan' => $bpjsKesehatan,
+                'potongan_lainnya' => $potonganLainnya,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
         }
 
-        return redirect()->back()->with(['success' => 'Master gaji karyawan ' . $nik . ' berhasil diperbarui!']);
+        return redirect()->back()->with(['success' => 'Master standar gaji & potongan karyawan ' . $nik . ' berhasil diperbarui!']);
     }
 }

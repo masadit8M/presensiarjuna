@@ -185,7 +185,7 @@
                                     <span class="input-group-text">Rp</span>
                                     <input type="number" name="potongan_absen" class="form-control" value="{{ round($detail->potongan_absen) }}">
                                 </div>
-                                <small class="text-muted">Formula default: (Izin + Alpha) × (Gaji Pokok / 26 HK)</small>
+                                <small class="text-muted">Formula standar Excel: (Izin + Alpha) × ((Gaji Pokok + Tunj. Transport) / 26 HK)</small>
                             </div>
 
                             <div class="mb-3">
@@ -194,7 +194,7 @@
                                     <span class="input-group-text">Rp</span>
                                     <input type="number" name="potongan_terlambat" class="form-control" value="{{ round($detail->potongan_terlambat) }}">
                                 </div>
-                                <small class="text-muted">Formula: Jam Telat × (Gaji Pokok / 26 / 10 Jam)</small>
+                                <small class="text-muted">Formula standar Excel: Jam Telat × (Gaji Harian / 10 Jam)</small>
                             </div>
 
                             <div class="mb-3">

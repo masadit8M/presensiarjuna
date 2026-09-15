@@ -177,7 +177,10 @@
                             </td>
                             <td class="text-nowrap">
                                 @if ($d->total_potongan > 0)
-                                    <span class="text-danger">-Rp {{ number_format($d->total_potongan, 0, ',', '.') }}</span>
+                                    <span class="text-danger fw-bold">-Rp {{ number_format($d->total_potongan, 0, ',', '.') }}</span>
+                                    @if (($d->potongan_kasbon ?? 0) > 0)
+                                        <div class="text-muted small">Kasbon: Rp {{ number_format($d->potongan_kasbon, 0, ',', '.') }}</div>
+                                    @endif
                                 @else
                                     <span class="text-muted">Rp 0</span>
                                 @endif
