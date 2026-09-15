@@ -91,6 +91,8 @@
                             <th style="min-width: 120px;">Tunj. Jabatan</th>
                             <th style="min-width: 160px;">Honor Kegiatan / Ekskul</th>
                             <th style="min-width: 140px;">Tarif Lembur (TPA)</th>
+                            <th style="min-width: 150px;">Insentif Pagi ≤06:30</th>
+                            <th style="min-width: 150px;">Pool SPP &gt;40 Siswa</th>
                             <th style="min-width: 150px;">Potongan Kasbon / Rutin</th>
                             <th class="text-center" style="min-width: 130px;">Aksi</th>
                         </tr>
@@ -138,6 +140,20 @@
                             </td>
                             <td class="text-nowrap">Rp {{ number_format($k->tarif_lembur ?? 0, 0, ',', '.') }}</td>
                             <td class="text-nowrap">
+                                @if (($k->insentif_pagi ?? 0) > 0)
+                                    <span class="badge bg-green-lt fw-bold">Rp {{ number_format($k->insentif_pagi, 0, ',', '.') }}</span>
+                                @else
+                                    <span class="text-muted small">—</span>
+                                @endif
+                            </td>
+                            <td class="text-nowrap">
+                                @if (($k->hak_pool_spp ?? 0) > 0)
+                                    <span class="badge bg-teal-lt fw-bold">Rp {{ number_format($k->hak_pool_spp, 0, ',', '.') }}</span>
+                                @else
+                                    <span class="text-muted small">—</span>
+                                @endif
+                            </td>
+                            <td class="text-nowrap">
                                 @if (($k->potongan_kasbon ?? 0) > 0)
                                     <span class="badge bg-danger-lt fw-bold">Kasbon: Rp {{ number_format($k->potongan_kasbon, 0, ',', '.') }}</span>
                                 @elseif (($k->bpjs_kesehatan ?? 0) > 0)
@@ -157,7 +173,7 @@
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="10" class="text-center py-4 text-muted">
+                            <td colspan="13" class="text-center py-4 text-muted">
                                 Tidak ada data karyawan.
                             </td>
                         </tr>
@@ -251,6 +267,31 @@
                                 <div class="input-group">
                                     <span class="input-group-text">Rp</span>
                                     <input type="number" name="tarif_lembur" class="form-control" value="{{ round($k->tarif_lembur ?? 0) }}">
+                                </div>
+                            </div>
+
+                            <div class="card border-success mb-3">
+                                <div class="card-header bg-success-lt py-2">
+                                    <strong class="text-success">🎯 Insentif Khusus Bunda TPA / Daycare</strong>
+                                    <div class="small text-muted mt-1">Berdasarkan Pedoman Dasar Perhitungan Gaji & Insentif Arjuna. Isi Rp 0 untuk Guru KB/TK.</div>
+                                </div>
+                                <div class="card-body pb-1">
+                                    <div class="mb-3">
+                                        <label class="form-label">Plafon Insentif Disiplin Pagi (≤ 06:30)</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text">Rp</span>
+                                            <input type="number" name="insentif_pagi" class="form-control" value="{{ round($k->insentif_pagi ?? 0) }}" placeholder="50000">
+                                        </div>
+                                        <small class="text-muted">Cair penuh jika <strong>semua hari kerja</strong> check-in ≤ 06:30. Gugur total (Rp 0) jika ada 1 hari terlambat.</small>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Plafon Pool Insentif SPP Lunas (&gt; 40 Siswa)</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text">Rp</span>
+                                            <input type="number" name="hak_pool_spp" class="form-control" value="{{ round($k->hak_pool_spp ?? 0) }}" placeholder="100000">
+                                        </div>
+                                        <small class="text-muted">Cair jika total siswa TPA lunas SPP ≥ 41 siswa pada periode yang digenerate.</small>
+                                    </div>
                                 </div>
                             </div>
 

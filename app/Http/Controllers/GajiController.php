@@ -60,6 +60,16 @@ class GajiController extends Controller
                     $table->decimal('potongan_lainnya', 12, 2)->default(0)->after('potongan_kasbon');
                 });
             }
+            if (!Schema::hasColumn('gaji_master', 'insentif_pagi')) {
+                Schema::table('gaji_master', function (Blueprint $table) {
+                    $table->decimal('insentif_pagi', 12, 2)->default(0)->after('gaji_harian');
+                });
+            }
+            if (!Schema::hasColumn('gaji_master', 'hak_pool_spp')) {
+                Schema::table('gaji_master', function (Blueprint $table) {
+                    $table->decimal('hak_pool_spp', 12, 2)->default(0)->after('insentif_pagi');
+                });
+            }
         }
 
         if (!Schema::hasTable('penggajian_periode')) {
@@ -379,18 +389,23 @@ class GajiController extends Controller
             $insentifPoolTpa = 0;
             $rewardDisiplin = 0;
 
-            $isTpa = str_contains(strtoupper($k->jabatan ?? ''), 'TPA') 
+            $isTpa = str_contains(strtoupper($k->jabatan ?? ''), 'TPA')
                   || str_contains(strtoupper($k->kode_dept ?? ''), 'TPA')
                   || str_contains(strtoupper($k->jabatan ?? ''), 'DAYCARE');
 
             if ($isTpa) {
-                if ($totalSiswaTpa >= 41) {
-                    $insentifPoolTpa = 150000;
-                }
-                if ($hadirPagiDisiplin >= 15) {
-                    $rewardDisiplin = 50000;
-                }
+                // Plafon diambil dari master, fallback ke default sesuai pedoman PDF
+                $plafonPoolSpp    = $master ? (float)($master->hak_pool_spp  ?? 100000) : 100000;
+                $plafonInsentifPagi = $master ? (float)($master->insentif_pagi ?? 50000)  : 50000;
+
+                // Pool SPP — cair jika siswa TPA lunas >= 41
+                $insentifPoolTpa = ($totalSiswaTpa >= 41) ? $plafonPoolSpp : 0;
+
+                // Insentif Pagi ≤ 06:30 — GUGUR TOTAL jika ada 1 hari keterlambatan
+                $adaTerlambat = count(array_filter($telatByDate, fn($t) => $t > 0)) > 0;
+                $rewardDisiplin = $adaTerlambat ? 0 : $plafonInsentifPagi;
             }
+            // Untuk non-TPA (Guru KB/TK): insentifPoolTpa = 0, rewardDisiplin = 0 (sudah default)
 
             $totalPenghasilan = $gapok + $tunjTransport + $tunjJabatan + $tunjKonsumsi + $tunjKehadiran + $honorKegiatan + $honorEkskul + $upahLembur + $insentifPoolTpa + $rewardDisiplin;
             $totalPotongan = $potonganAbsen + $potonganTerlambat + $potonganKasbon + $potonganBpjs + $potonganLainnya;
@@ -1050,7 +1065,9 @@ class GajiController extends Controller
                 'gaji_master.potongan_kasbon',
                 'gaji_master.bpjs_kesehatan',
                 'gaji_master.potongan_lainnya',
-                'gaji_master.gaji_harian'
+                'gaji_master.gaji_harian',
+                'gaji_master.insentif_pagi',
+                'gaji_master.hak_pool_spp'
             )
             ->orderBy('karyawan.nama_lengkap', 'asc')
             ->get();
@@ -1097,6 +1114,8 @@ class GajiController extends Controller
                     $grouped[$normName]['primary']->bpjs_kesehatan = $row->bpjs_kesehatan;
                     $grouped[$normName]['primary']->potongan_lainnya = $row->potongan_lainnya;
                     $grouped[$normName]['primary']->gaji_harian = $row->gaji_harian;
+                    $grouped[$normName]['primary']->insentif_pagi = $row->insentif_pagi;
+                    $grouped[$normName]['primary']->hak_pool_spp = $row->hak_pool_spp;
                 }
             }
         }
@@ -1167,6 +1186,8 @@ class GajiController extends Controller
         $potonganKasbon = str_replace(['.', ','], '', $request->potongan_kasbon ?? 0);
         $bpjsKesehatan = str_replace(['.', ','], '', $request->bpjs_kesehatan ?? 0);
         $potonganLainnya = str_replace(['.', ','], '', $request->potongan_lainnya ?? 0);
+        $insentifPagi = str_replace(['.', ','], '', $request->insentif_pagi ?? 0);
+        $hakPoolSpp = str_replace(['.', ','], '', $request->hak_pool_spp ?? 0);
         $gajiHarian = round(($gapok + $tunjTransport) / 26, 2);
 
         // Find all NIKs associated with this person
@@ -1194,6 +1215,8 @@ class GajiController extends Controller
                     'potongan_kasbon' => $potonganKasbon,
                     'bpjs_kesehatan' => $bpjsKesehatan,
                     'potongan_lainnya' => $potonganLainnya,
+                    'insentif_pagi' => $insentifPagi,
+                    'hak_pool_spp' => $hakPoolSpp,
                     'updated_at' => now(),
                 ]);
             } else {
@@ -1210,6 +1233,8 @@ class GajiController extends Controller
                     'potongan_kasbon' => $potonganKasbon,
                     'bpjs_kesehatan' => $bpjsKesehatan,
                     'potongan_lainnya' => $potonganLainnya,
+                    'insentif_pagi' => $insentifPagi,
+                    'hak_pool_spp' => $hakPoolSpp,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
