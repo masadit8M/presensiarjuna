@@ -79,7 +79,7 @@
 
         <div class="card">
             <div class="table-responsive">
-                <table class="table table-vcenter card-table table-striped" style="min-width: 1250px;">
+                <table class="table table-vcenter card-table table-striped" style="min-width: 1400px;">
                     <thead>
                         <tr>
                             <th style="min-width: 220px;">NIK & Nama Karyawan</th>
@@ -87,6 +87,7 @@
                             <th style="min-width: 130px;">Cabang / Dept</th>
                             <th style="min-width: 130px;">Gaji Pokok</th>
                             <th style="min-width: 130px;">Tunj. Transport</th>
+                            <th style="min-width: 150px;">Gaji Harian (26 HK)</th>
                             <th style="min-width: 120px;">Tunj. Jabatan</th>
                             <th style="min-width: 160px;">Honor Kegiatan / Ekskul</th>
                             <th style="min-width: 140px;">Tarif Lembur (TPA)</th>
@@ -121,6 +122,15 @@
                                 Rp {{ number_format($k->gaji_pokok ?? 0, 0, ',', '.') }}
                             </td>
                             <td class="text-nowrap">Rp {{ number_format($k->tunjangan_transportasi ?? 150000, 0, ',', '.') }}</td>
+                            <td class="text-nowrap">
+                                <div class="fw-bold text-success">
+                                    Rp {{ number_format($k->gaji_harian ?? 0, 0, ',', '.') }}
+                                    <span class="text-muted fw-normal small">/hari</span>
+                                </div>
+                                <div class="text-muted small">
+                                    Per jam: Rp {{ number_format($k->gaji_per_jam ?? 0, 0, ',', '.') }}
+                                </div>
+                            </td>
                             <td class="text-nowrap">Rp {{ number_format($k->tunjangan_jabatan ?? 0, 0, ',', '.') }}</td>
                             <td>
                                 <div class="small text-nowrap">Kegiatan: Rp {{ number_format($k->tarif_honor_kegiatan ?? 0, 0, ',', '.') }}</div>
@@ -181,14 +191,31 @@
                                 <label class="form-label required">Gaji Pokok</label>
                                 <div class="input-group">
                                     <span class="input-group-text">Rp</span>
-                                    <input type="number" name="gaji_pokok" class="form-control" value="{{ round($k->gaji_pokok ?? 0) }}" required>
+                                    <input type="number" name="gaji_pokok" id="gapok_{{ $k->nik }}" class="form-control" value="{{ round($k->gaji_pokok ?? 0) }}" oninput="hitungHarian('{{ $k->nik }}')" required>
                                 </div>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label required">Tunjangan Transportasi</label>
                                 <div class="input-group">
                                     <span class="input-group-text">Rp</span>
-                                    <input type="number" name="tunjangan_transportasi" class="form-control" value="{{ round($k->tunjangan_transportasi ?? 150000) }}" required>
+                                    <input type="number" name="tunjangan_transportasi" id="transp_{{ $k->nik }}" class="form-control" value="{{ round($k->tunjangan_transportasi ?? 150000) }}" oninput="hitungHarian('{{ $k->nik }}')" required>
+                                </div>
+                            </div>
+
+                            <div class="card bg-azure-lt mb-3 border-0">
+                                <div class="card-body p-2">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong class="text-primary">Gaji Harian Standar (26 HK):</strong>
+                                            <div class="small text-muted">Rumus: (Gaji Pokok + Tunj. Transport) &divide; 26 HK</div>
+                                        </div>
+                                        <div class="text-end">
+                                            <div class="h3 mb-0 text-primary fw-bold" id="labelHarian{{ $k->nik }}">
+                                                Rp {{ number_format($k->gaji_harian ?? 0, 0, ',', '.') }}
+                                            </div>
+                                            <div class="small text-muted">Dasar potongan ketidakhadiran /hari</div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                             <div class="mb-3">
@@ -268,3 +295,19 @@
     </div>
 </div>
 @endsection
+
+@push('myscript')
+<script>
+function hitungHarian(nik) {
+    var gapokEl = document.getElementById('gapok_' + nik);
+    var transpEl = document.getElementById('transp_' + nik);
+    var labelEl = document.getElementById('labelHarian' + nik);
+    if (gapokEl && transpEl && labelEl) {
+        var gapok = parseFloat(gapokEl.value) || 0;
+        var transp = parseFloat(transpEl.value) || 0;
+        var harian = Math.round((gapok + transp) / 26);
+        labelEl.innerText = 'Rp ' + harian.toLocaleString('id-ID');
+    }
+}
+</script>
+@endpush

@@ -45,6 +45,11 @@ class GajiController extends Controller
                 $table->timestamps();
             });
         } else {
+            if (!Schema::hasColumn('gaji_master', 'gaji_harian')) {
+                Schema::table('gaji_master', function (Blueprint $table) {
+                    $table->decimal('gaji_harian', 12, 2)->default(0)->after('tunjangan_transportasi');
+                });
+            }
             if (!Schema::hasColumn('gaji_master', 'potongan_kasbon')) {
                 Schema::table('gaji_master', function (Blueprint $table) {
                     $table->decimal('potongan_kasbon', 12, 2)->default(0)->after('bpjs_ketenagakerjaan');
@@ -1044,7 +1049,8 @@ class GajiController extends Controller
                 'gaji_master.tarif_lembur',
                 'gaji_master.potongan_kasbon',
                 'gaji_master.bpjs_kesehatan',
-                'gaji_master.potongan_lainnya'
+                'gaji_master.potongan_lainnya',
+                'gaji_master.gaji_harian'
             )
             ->orderBy('karyawan.nama_lengkap', 'asc')
             ->get();
@@ -1090,6 +1096,7 @@ class GajiController extends Controller
                     $grouped[$normName]['primary']->potongan_kasbon = $row->potongan_kasbon;
                     $grouped[$normName]['primary']->bpjs_kesehatan = $row->bpjs_kesehatan;
                     $grouped[$normName]['primary']->potongan_lainnya = $row->potongan_lainnya;
+                    $grouped[$normName]['primary']->gaji_harian = $row->gaji_harian;
                 }
             }
         }
@@ -1102,6 +1109,13 @@ class GajiController extends Controller
             $item->all_niks = $allNiks;
             $item->alt_niks = array_values(array_diff($allNiks, [$item->nik]));
             $item->all_cabang = $data['all_cabang'];
+
+            // Calculate standard daily wage from Excel formula: (Gapok + Transp) / 26 HK
+            $gapok = $item->gaji_pokok ?? 0;
+            $transp = $item->tunjangan_transportasi ?? 0;
+            $harianCalc = ($gapok + $transp) > 0 ? round(($gapok + $transp) / 26, 2) : 0;
+            $item->gaji_harian = ($item->gaji_harian ?? 0) > 0 ? $item->gaji_harian : $harianCalc;
+            $item->gaji_per_jam = $item->gaji_harian > 0 ? round($item->gaji_harian / 10, 2) : 0;
 
             // Filter kode_cabang: match if employee belongs to the branch on ANY of their NIKs
             if ($request->kode_cabang && !in_array($request->kode_cabang, $data['all_kode_cabang'])) {
@@ -1153,6 +1167,7 @@ class GajiController extends Controller
         $potonganKasbon = str_replace(['.', ','], '', $request->potongan_kasbon ?? 0);
         $bpjsKesehatan = str_replace(['.', ','], '', $request->bpjs_kesehatan ?? 0);
         $potonganLainnya = str_replace(['.', ','], '', $request->potongan_lainnya ?? 0);
+        $gajiHarian = round(($gapok + $tunjTransport) / 26, 2);
 
         // Find all NIKs associated with this person
         $currentKaryawan = DB::table('karyawan')->where('nik', $nik)->first();
@@ -1170,6 +1185,7 @@ class GajiController extends Controller
                 DB::table('gaji_master')->where('nik', $targetNik)->update([
                     'gaji_pokok' => $gapok,
                     'tunjangan_transportasi' => $tunjTransport,
+                    'gaji_harian' => $gajiHarian,
                     'tunjangan_jabatan' => $tunjJabatan,
                     'tunjangan_konsumsi' => $tunjKonsumsi,
                     'tarif_honor_kegiatan' => $honorKegiatan,
@@ -1185,6 +1201,7 @@ class GajiController extends Controller
                     'nik' => $targetNik,
                     'gaji_pokok' => $gapok,
                     'tunjangan_transportasi' => $tunjTransport,
+                    'gaji_harian' => $gajiHarian,
                     'tunjangan_jabatan' => $tunjJabatan,
                     'tunjangan_konsumsi' => $tunjKonsumsi,
                     'tarif_honor_kegiatan' => $honorKegiatan,
