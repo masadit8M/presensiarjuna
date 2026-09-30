@@ -56,6 +56,12 @@ class SlipPdfService
             ? 'Sekretariat: Jl. Raya Langsep 23 B Telp. (0341) 567723 Malang 65112' 
             : 'Sekretariat: Jl. Citandui 15 B Malang Kodepos 65116 Telp. (0341) 4371932';
 
+        // Logo Yayasan
+        $logoPath = function_exists('public_path') ? public_path('assets/img/logo_yayasan.png') : realpath(__DIR__ . '/../../public') . '/assets/img/logo_yayasan.png';
+        if (file_exists($logoPath)) {
+            $pdf->Image($logoPath, 15, $startY, 18); // X=15, Y=$startY, Width=18mm
+        }
+
         // Kop Lembaga
         $pdf->SetFont('Helvetica', 'B', 12);
         $pdf->Cell(0, 5, 'YAYASAN ARJUNA CENDEKIA', 0, 1, 'C');
