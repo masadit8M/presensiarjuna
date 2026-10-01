@@ -89,6 +89,10 @@
                                     <span class="input-group-text">Rp</span>
                                     <input type="number" name="tunjangan_jabatan" class="form-control" value="{{ round($detail->tunjangan_jabatan) }}">
                                 </div>
+                                <div class="input-group input-group-sm mt-1">
+                                    <span class="input-group-text text-muted bg-light">Keterangan</span>
+                                    <input type="text" name="ket_tunjangan_jabatan" class="form-control" placeholder="Atas dasar apa (cth: Kepala Sekolah, Wali Kelas)" value="{{ $detail->ket_tunjangan_jabatan ?? '' }}">
+                                </div>
                             </div>
 
                             <div class="mb-3">
@@ -96,6 +100,10 @@
                                 <div class="input-group">
                                     <span class="input-group-text">Rp</span>
                                     <input type="number" name="tunjangan_konsumsi" class="form-control" value="{{ round($detail->tunjangan_konsumsi) }}">
+                                </div>
+                                <div class="input-group input-group-sm mt-1">
+                                    <span class="input-group-text text-muted bg-light">Keterangan</span>
+                                    <input type="text" name="ket_tunjangan_konsumsi" class="form-control" placeholder="Atas dasar apa (cth: Konsumsi Piket, Uang Makan Harian)" value="{{ $detail->ket_tunjangan_konsumsi ?? '' }}">
                                 </div>
                             </div>
 
@@ -115,6 +123,10 @@
                                     <span class="input-group-text">Rp</span>
                                     <input type="number" name="honor_kegiatan" class="form-control" value="{{ round($detail->honor_kegiatan) }}">
                                 </div>
+                                <div class="input-group input-group-sm mt-1">
+                                    <span class="input-group-text text-muted bg-light">Keterangan</span>
+                                    <input type="text" name="ket_honor_kegiatan" class="form-control" placeholder="Atas dasar apa (cth: Kegiatan Parenting, Acara)" value="{{ $detail->ket_honor_kegiatan ?? '' }}">
+                                </div>
                             </div>
 
                             <div class="mb-3">
@@ -122,6 +134,10 @@
                                 <div class="input-group">
                                     <span class="input-group-text">Rp</span>
                                     <input type="number" name="honor_ekskul" class="form-control" value="{{ round($detail->honor_ekskul) }}">
+                                </div>
+                                <div class="input-group input-group-sm mt-1">
+                                    <span class="input-group-text text-muted bg-light">Keterangan</span>
+                                    <input type="text" name="ket_honor_ekskul" class="form-control" placeholder="Atas dasar apa (cth: Ekskul Menari, Menggambar)" value="{{ $detail->ket_honor_ekskul ?? '' }}">
                                 </div>
                             </div>
 
@@ -132,6 +148,10 @@
                                 <div class="input-group">
                                     <span class="input-group-text">Rp</span>
                                     <input type="number" name="upah_lembur" class="form-control" value="{{ round($detail->upah_lembur) }}">
+                                </div>
+                                <div class="input-group input-group-sm mt-1">
+                                    <span class="input-group-text text-muted bg-light">Keterangan</span>
+                                    <input type="text" name="ket_upah_lembur" class="form-control" placeholder="Atas dasar apa (cth: Lembur Sore Penjemputan)" value="{{ $detail->ket_upah_lembur ?? '' }}">
                                 </div>
                             </div>
 
@@ -159,6 +179,10 @@
                                     <span class="input-group-text">Rp</span>
                                     <input type="number" name="bonus_tambahan" class="form-control" value="{{ round($detail->bonus_tambahan) }}">
                                 </div>
+                                <div class="input-group input-group-sm mt-1">
+                                    <span class="input-group-text text-muted bg-light">Keterangan</span>
+                                    <input type="text" name="ket_bonus_tambahan" class="form-control" placeholder="Atas dasar apa (cth: Bonus Hari Raya, Kinerja)" value="{{ $detail->ket_bonus_tambahan ?? '' }}">
+                                </div>
                             </div>
 
                             <div class="mb-3">
@@ -166,6 +190,10 @@
                                 <div class="input-group">
                                     <span class="input-group-text">Rp</span>
                                     <input type="number" name="tunjangan_lainnya" class="form-control" value="{{ round($detail->tunjangan_lainnya) }}">
+                                </div>
+                                <div class="input-group input-group-sm mt-1">
+                                    <span class="input-group-text text-muted bg-light">Keterangan</span>
+                                    <input type="text" name="ket_tunjangan_lainnya" class="form-control" placeholder="Atas dasar apa (cth: Koreksi Gaji, Pengganti Transport)" value="{{ $detail->ket_tunjangan_lainnya ?? '' }}">
                                 </div>
                             </div>
                         </div>
@@ -203,6 +231,10 @@
                                     <span class="input-group-text">Rp</span>
                                     <input type="number" name="potongan_kasbon" class="form-control" value="{{ round($detail->potongan_kasbon) }}">
                                 </div>
+                                <div class="input-group input-group-sm mt-1">
+                                    <span class="input-group-text text-muted bg-light">Keterangan</span>
+                                    <input type="text" name="ket_potongan_kasbon" class="form-control" placeholder="Atas dasar apa (cth: Angsuran Pinjaman Koperasi)" value="{{ $detail->ket_potongan_kasbon ?? '' }}">
+                                </div>
                             </div>
 
                             <div class="mb-3">
@@ -218,6 +250,10 @@
                                 <div class="input-group">
                                     <span class="input-group-text">Rp</span>
                                     <input type="number" name="potongan_lainnya" class="form-control" value="{{ round($detail->potongan_lainnya) }}">
+                                </div>
+                                <div class="input-group input-group-sm mt-1">
+                                    <span class="input-group-text text-muted bg-light">Keterangan</span>
+                                    <input type="text" name="ket_potongan_lainnya" class="form-control" placeholder="Atas dasar apa (cth: Sanksi / Penyesuaian lainnya)" value="{{ $detail->ket_potongan_lainnya ?? '' }}">
                                 </div>
                             </div>
 

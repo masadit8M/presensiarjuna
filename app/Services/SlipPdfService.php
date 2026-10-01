@@ -139,22 +139,27 @@ class SlipPdfService
         ];
 
         if (($detail->tunjangan_jabatan ?? 0) > 0) {
-            $pendapatan[] = ['TUNJ. JABATAN', $detail->tunjangan_jabatan];
+            $lbl = 'TUNJ. JABATAN' . (!empty($detail->ket_tunjangan_jabatan) ? ' (' . $detail->ket_tunjangan_jabatan . ')' : '');
+            $pendapatan[] = [$lbl, $detail->tunjangan_jabatan];
         }
         if (($detail->tunjangan_konsumsi ?? 0) > 0) {
-            $pendapatan[] = ['TUNJ. KONSUMSI', $detail->tunjangan_konsumsi];
+            $lbl = 'TUNJ. KONSUMSI' . (!empty($detail->ket_tunjangan_konsumsi) ? ' (' . $detail->ket_tunjangan_konsumsi . ')' : '');
+            $pendapatan[] = [$lbl, $detail->tunjangan_konsumsi];
         }
         if (($detail->tunjangan_kehadiran ?? 0) > 0) {
             $pendapatan[] = ['TUNJ. KEHADIRAN', $detail->tunjangan_kehadiran];
         }
         if (($detail->honor_kegiatan ?? 0) > 0) {
-            $pendapatan[] = ['UANG KEGIATAN', $detail->honor_kegiatan];
+            $lbl = 'UANG KEGIATAN' . (!empty($detail->ket_honor_kegiatan) ? ' (' . $detail->ket_honor_kegiatan . ')' : '');
+            $pendapatan[] = [$lbl, $detail->honor_kegiatan];
         }
         if (($detail->honor_ekskul ?? 0) > 0) {
-            $pendapatan[] = ['UANG EKSTRA / EKSKUL', $detail->honor_ekskul];
+            $lbl = 'UANG EKSTRA / EKSKUL' . (!empty($detail->ket_honor_ekskul) ? ' (' . $detail->ket_honor_ekskul . ')' : '');
+            $pendapatan[] = [$lbl, $detail->honor_ekskul];
         }
         if (($detail->upah_lembur ?? 0) > 0) {
-            $pendapatan[] = ['UANG LEMBUR', $detail->upah_lembur];
+            $lbl = 'UANG LEMBUR' . (!empty($detail->ket_upah_lembur) ? ' (' . $detail->ket_upah_lembur . ')' : '');
+            $pendapatan[] = [$lbl, $detail->upah_lembur];
         }
         if (($detail->insentif_pool_tpa ?? 0) > 0) {
             $pendapatan[] = ['INSENTIF POOL TPA (GATE 41)', $detail->insentif_pool_tpa];
@@ -163,10 +168,12 @@ class SlipPdfService
             $pendapatan[] = ['REWARD DISIPLIN 06.30', $detail->reward_disiplin];
         }
         if (($detail->bonus_tambahan ?? 0) > 0) {
-            $pendapatan[] = ['BONUS / THR', $detail->bonus_tambahan];
+            $lbl = 'BONUS / THR' . (!empty($detail->ket_bonus_tambahan) ? ' (' . $detail->ket_bonus_tambahan . ')' : '');
+            $pendapatan[] = [$lbl, $detail->bonus_tambahan];
         }
         if (($detail->tunjangan_lainnya ?? 0) > 0) {
-            $pendapatan[] = ['PENYESUAIAN / LAINNYA', $detail->tunjangan_lainnya];
+            $lbl = 'PENYESUAIAN / LAIN' . (!empty($detail->ket_tunjangan_lainnya) ? ' (' . $detail->ket_tunjangan_lainnya . ')' : '');
+            $pendapatan[] = [$lbl, $detail->tunjangan_lainnya];
         }
 
         $potongan = [];
@@ -177,13 +184,15 @@ class SlipPdfService
             $potongan[] = ['POT. TERLAMBAT (' . ($detail->terlambat_jam ?? 0) . ' Jam)', $detail->potongan_terlambat];
         }
         if (($detail->potongan_kasbon ?? 0) > 0) {
-            $potongan[] = ['PINJAMAN / KAS BON', $detail->potongan_kasbon];
+            $lbl = 'PINJAMAN / KAS BON' . (!empty($detail->ket_potongan_kasbon) ? ' (' . $detail->ket_potongan_kasbon . ')' : '');
+            $potongan[] = [$lbl, $detail->potongan_kasbon];
         }
         if (($detail->potongan_bpjs ?? 0) > 0) {
             $potongan[] = ['BPJS', $detail->potongan_bpjs];
         }
         if (($detail->potongan_lainnya ?? 0) > 0) {
-            $potongan[] = ['SANKSI / POT. LAIN', $detail->potongan_lainnya];
+            $lbl = 'SANKSI / POT. LAIN' . (!empty($detail->ket_potongan_lainnya) ? ' (' . $detail->ket_potongan_lainnya . ')' : '');
+            $potongan[] = [$lbl, $detail->potongan_lainnya];
         }
 
         $maxRows = max(count($pendapatan), count($potongan), 4);

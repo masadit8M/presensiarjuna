@@ -164,25 +164,56 @@
                             </tr>
                             @if ($detail->tunjangan_jabatan > 0)
                             <tr>
-                                <td>TUNJ. JABATAN</td>
+                                <td>
+                                    TUNJ. JABATAN
+                                    @if(!empty($detail->ket_tunjangan_jabatan))
+                                        <div style="font-size: 7.5pt; color: #555; font-style: italic;">* {{ $detail->ket_tunjangan_jabatan }}</div>
+                                    @endif
+                                </td>
                                 <td style="text-align: right;">Rp {{ number_format($detail->tunjangan_jabatan, 0, ',', '.') }}</td>
+                            </tr>
+                            @endif
+                            @if ($detail->tunjangan_konsumsi > 0)
+                            <tr>
+                                <td>
+                                    TUNJ. KONSUMSI
+                                    @if(!empty($detail->ket_tunjangan_konsumsi))
+                                        <div style="font-size: 7.5pt; color: #555; font-style: italic;">* {{ $detail->ket_tunjangan_konsumsi }}</div>
+                                    @endif
+                                </td>
+                                <td style="text-align: right;">Rp {{ number_format($detail->tunjangan_konsumsi, 0, ',', '.') }}</td>
                             </tr>
                             @endif
                             @if ($detail->honor_kegiatan > 0)
                             <tr>
-                                <td>UANG KEGIATAN</td>
+                                <td>
+                                    UANG KEGIATAN
+                                    @if(!empty($detail->ket_honor_kegiatan))
+                                        <div style="font-size: 7.5pt; color: #555; font-style: italic;">* {{ $detail->ket_honor_kegiatan }}</div>
+                                    @endif
+                                </td>
                                 <td style="text-align: right;">Rp {{ number_format($detail->honor_kegiatan, 0, ',', '.') }}</td>
                             </tr>
                             @endif
                             @if ($detail->honor_ekskul > 0)
                             <tr>
-                                <td>UANG EKSTRA / EKSKUL</td>
+                                <td>
+                                    UANG EKSTRA / EKSKUL
+                                    @if(!empty($detail->ket_honor_ekskul))
+                                        <div style="font-size: 7.5pt; color: #555; font-style: italic;">* {{ $detail->ket_honor_ekskul }}</div>
+                                    @endif
+                                </td>
                                 <td style="text-align: right;">Rp {{ number_format($detail->honor_ekskul, 0, ',', '.') }}</td>
                             </tr>
                             @endif
                             @if ($detail->upah_lembur > 0)
                             <tr>
-                                <td>UANG LEMBUR</td>
+                                <td>
+                                    UANG LEMBUR
+                                    @if(!empty($detail->ket_upah_lembur))
+                                        <div style="font-size: 7.5pt; color: #555; font-style: italic;">* {{ $detail->ket_upah_lembur }}</div>
+                                    @endif
+                                </td>
                                 <td style="text-align: right;">Rp {{ number_format($detail->upah_lembur, 0, ',', '.') }}</td>
                             </tr>
                             @endif
@@ -200,13 +231,23 @@
                             @endif
                             @if ($detail->bonus_tambahan > 0)
                             <tr>
-                                <td>BONUS / THR</td>
+                                <td>
+                                    BONUS / THR
+                                    @if(!empty($detail->ket_bonus_tambahan))
+                                        <div style="font-size: 7.5pt; color: #555; font-style: italic;">* {{ $detail->ket_bonus_tambahan }}</div>
+                                    @endif
+                                </td>
                                 <td style="text-align: right;">Rp {{ number_format($detail->bonus_tambahan, 0, ',', '.') }}</td>
                             </tr>
                             @endif
                             @if ($detail->tunjangan_lainnya > 0)
                             <tr>
-                                <td>PENYESUAIAN / LAINNYA</td>
+                                <td>
+                                    PENYESUAIAN / LAINNYA
+                                    @if(!empty($detail->ket_tunjangan_lainnya))
+                                        <div style="font-size: 7.5pt; color: #555; font-style: italic;">* {{ $detail->ket_tunjangan_lainnya }}</div>
+                                    @endif
+                                </td>
                                 <td style="text-align: right;">Rp {{ number_format($detail->tunjangan_lainnya, 0, ',', '.') }}</td>
                             </tr>
                             @endif
@@ -234,7 +275,12 @@
                             @endif
                             @if ($detail->potongan_kasbon > 0)
                             <tr>
-                                <td>PINJAMAN / KAS BON</td>
+                                <td>
+                                    PINJAMAN / KAS BON
+                                    @if(!empty($detail->ket_potongan_kasbon))
+                                        <div style="font-size: 7.5pt; color: #777; font-style: italic;">* {{ $detail->ket_potongan_kasbon }}</div>
+                                    @endif
+                                </td>
                                 <td style="text-align: right; color:#c00;">Rp {{ number_format($detail->potongan_kasbon, 0, ',', '.') }}</td>
                             </tr>
                             @endif
@@ -246,7 +292,12 @@
                             @endif
                             @if ($detail->potongan_lainnya > 0)
                             <tr>
-                                <td>SANKSI / POT. LAIN</td>
+                                <td>
+                                    SANKSI / POT. LAIN
+                                    @if(!empty($detail->ket_potongan_lainnya))
+                                        <div style="font-size: 7.5pt; color: #777; font-style: italic;">* {{ $detail->ket_potongan_lainnya }}</div>
+                                    @endif
+                                </td>
                                 <td style="text-align: right; color:#c00;">Rp {{ number_format($detail->potongan_lainnya, 0, ',', '.') }}</td>
                             </tr>
                             @endif
@@ -353,25 +404,56 @@
                             </tr>
                             @if ($detail->tunjangan_jabatan > 0)
                             <tr>
-                                <td>TUNJ. JABATAN</td>
+                                <td>
+                                    TUNJ. JABATAN
+                                    @if(!empty($detail->ket_tunjangan_jabatan))
+                                        <div style="font-size: 7.5pt; color: #555; font-style: italic;">* {{ $detail->ket_tunjangan_jabatan }}</div>
+                                    @endif
+                                </td>
                                 <td style="text-align: right;">Rp {{ number_format($detail->tunjangan_jabatan, 0, ',', '.') }}</td>
+                            </tr>
+                            @endif
+                            @if ($detail->tunjangan_konsumsi > 0)
+                            <tr>
+                                <td>
+                                    TUNJ. KONSUMSI
+                                    @if(!empty($detail->ket_tunjangan_konsumsi))
+                                        <div style="font-size: 7.5pt; color: #555; font-style: italic;">* {{ $detail->ket_tunjangan_konsumsi }}</div>
+                                    @endif
+                                </td>
+                                <td style="text-align: right;">Rp {{ number_format($detail->tunjangan_konsumsi, 0, ',', '.') }}</td>
                             </tr>
                             @endif
                             @if ($detail->honor_kegiatan > 0)
                             <tr>
-                                <td>UANG KEGIATAN</td>
+                                <td>
+                                    UANG KEGIATAN
+                                    @if(!empty($detail->ket_honor_kegiatan))
+                                        <div style="font-size: 7.5pt; color: #555; font-style: italic;">* {{ $detail->ket_honor_kegiatan }}</div>
+                                    @endif
+                                </td>
                                 <td style="text-align: right;">Rp {{ number_format($detail->honor_kegiatan, 0, ',', '.') }}</td>
                             </tr>
                             @endif
                             @if ($detail->honor_ekskul > 0)
                             <tr>
-                                <td>UANG EKSTRA / EKSKUL</td>
+                                <td>
+                                    UANG EKSTRA / EKSKUL
+                                    @if(!empty($detail->ket_honor_ekskul))
+                                        <div style="font-size: 7.5pt; color: #555; font-style: italic;">* {{ $detail->ket_honor_ekskul }}</div>
+                                    @endif
+                                </td>
                                 <td style="text-align: right;">Rp {{ number_format($detail->honor_ekskul, 0, ',', '.') }}</td>
                             </tr>
                             @endif
                             @if ($detail->upah_lembur > 0)
                             <tr>
-                                <td>UANG LEMBUR</td>
+                                <td>
+                                    UANG LEMBUR
+                                    @if(!empty($detail->ket_upah_lembur))
+                                        <div style="font-size: 7.5pt; color: #555; font-style: italic;">* {{ $detail->ket_upah_lembur }}</div>
+                                    @endif
+                                </td>
                                 <td style="text-align: right;">Rp {{ number_format($detail->upah_lembur, 0, ',', '.') }}</td>
                             </tr>
                             @endif
@@ -389,13 +471,23 @@
                             @endif
                             @if ($detail->bonus_tambahan > 0)
                             <tr>
-                                <td>BONUS / THR</td>
+                                <td>
+                                    BONUS / THR
+                                    @if(!empty($detail->ket_bonus_tambahan))
+                                        <div style="font-size: 7.5pt; color: #555; font-style: italic;">* {{ $detail->ket_bonus_tambahan }}</div>
+                                    @endif
+                                </td>
                                 <td style="text-align: right;">Rp {{ number_format($detail->bonus_tambahan, 0, ',', '.') }}</td>
                             </tr>
                             @endif
                             @if ($detail->tunjangan_lainnya > 0)
                             <tr>
-                                <td>PENYESUAIAN / LAINNYA</td>
+                                <td>
+                                    PENYESUAIAN / LAINNYA
+                                    @if(!empty($detail->ket_tunjangan_lainnya))
+                                        <div style="font-size: 7.5pt; color: #555; font-style: italic;">* {{ $detail->ket_tunjangan_lainnya }}</div>
+                                    @endif
+                                </td>
                                 <td style="text-align: right;">Rp {{ number_format($detail->tunjangan_lainnya, 0, ',', '.') }}</td>
                             </tr>
                             @endif
@@ -423,7 +515,12 @@
                             @endif
                             @if ($detail->potongan_kasbon > 0)
                             <tr>
-                                <td>PINJAMAN / KAS BON</td>
+                                <td>
+                                    PINJAMAN / KAS BON
+                                    @if(!empty($detail->ket_potongan_kasbon))
+                                        <div style="font-size: 7.5pt; color: #777; font-style: italic;">* {{ $detail->ket_potongan_kasbon }}</div>
+                                    @endif
+                                </td>
                                 <td style="text-align: right; color:#c00;">Rp {{ number_format($detail->potongan_kasbon, 0, ',', '.') }}</td>
                             </tr>
                             @endif
@@ -435,7 +532,12 @@
                             @endif
                             @if ($detail->potongan_lainnya > 0)
                             <tr>
-                                <td>SANKSI / POT. LAIN</td>
+                                <td>
+                                    SANKSI / POT. LAIN
+                                    @if(!empty($detail->ket_potongan_lainnya))
+                                        <div style="font-size: 7.5pt; color: #777; font-style: italic;">* {{ $detail->ket_potongan_lainnya }}</div>
+                                    @endif
+                                </td>
                                 <td style="text-align: right; color:#c00;">Rp {{ number_format($detail->potongan_lainnya, 0, ',', '.') }}</td>
                             </tr>
                             @endif

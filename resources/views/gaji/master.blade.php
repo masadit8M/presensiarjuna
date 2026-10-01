@@ -133,12 +133,32 @@
                                     Per jam: Rp {{ number_format($k->gaji_per_jam ?? 0, 0, ',', '.') }}
                                 </div>
                             </td>
-                            <td class="text-nowrap">Rp {{ number_format($k->tunjangan_jabatan ?? 0, 0, ',', '.') }}</td>
-                            <td>
-                                <div class="small text-nowrap">Kegiatan: Rp {{ number_format($k->tarif_honor_kegiatan ?? 0, 0, ',', '.') }}</div>
-                                <div class="small text-muted text-nowrap">Ekskul: Rp {{ number_format($k->tarif_ekskul ?? 0, 0, ',', '.') }}</div>
+                            <td class="text-nowrap">
+                                Rp {{ number_format($k->tunjangan_jabatan ?? 0, 0, ',', '.') }}
+                                @if(!empty($k->ket_tunjangan_jabatan))
+                                    <div class="text-muted small">({{ $k->ket_tunjangan_jabatan }})</div>
+                                @endif
                             </td>
-                            <td class="text-nowrap">Rp {{ number_format($k->tarif_lembur ?? 0, 0, ',', '.') }}</td>
+                            <td>
+                                <div class="small text-nowrap">
+                                    Kegiatan: Rp {{ number_format($k->tarif_honor_kegiatan ?? 0, 0, ',', '.') }}
+                                    @if(!empty($k->ket_honor_kegiatan))
+                                        <span class="text-muted">({{ $k->ket_honor_kegiatan }})</span>
+                                    @endif
+                                </div>
+                                <div class="small text-muted text-nowrap">
+                                    Ekskul: Rp {{ number_format($k->tarif_ekskul ?? 0, 0, ',', '.') }}
+                                    @if(!empty($k->ket_honor_ekskul))
+                                        <span>({{ $k->ket_honor_ekskul }})</span>
+                                    @endif
+                                </div>
+                            </td>
+                            <td class="text-nowrap">
+                                Rp {{ number_format($k->tarif_lembur ?? 0, 0, ',', '.') }}
+                                @if(!empty($k->ket_tarif_lembur))
+                                    <div class="text-muted small">({{ $k->ket_tarif_lembur }})</div>
+                                @endif
+                            </td>
                             <td class="text-nowrap">
                                 @if (($k->insentif_pagi ?? 0) > 0)
                                     <span class="badge bg-green-lt fw-bold">Rp {{ number_format($k->insentif_pagi, 0, ',', '.') }}</span>
@@ -240,12 +260,20 @@
                                     <span class="input-group-text">Rp</span>
                                     <input type="number" name="tunjangan_jabatan" class="form-control" value="{{ round($k->tunjangan_jabatan ?? 0) }}">
                                 </div>
+                                <div class="input-group input-group-sm mt-1">
+                                    <span class="input-group-text text-muted bg-light">Keterangan</span>
+                                    <input type="text" name="ket_tunjangan_jabatan" class="form-control" placeholder="Atas dasar apa (cth: Kepala Sekolah, Wali Kelas, dll)" value="{{ $k->ket_tunjangan_jabatan ?? '' }}">
+                                </div>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Tunjangan Konsumsi</label>
                                 <div class="input-group">
                                     <span class="input-group-text">Rp</span>
                                     <input type="number" name="tunjangan_konsumsi" class="form-control" value="{{ round($k->tunjangan_konsumsi ?? 0) }}">
+                                </div>
+                                <div class="input-group input-group-sm mt-1">
+                                    <span class="input-group-text text-muted bg-light">Keterangan</span>
+                                    <input type="text" name="ket_tunjangan_konsumsi" class="form-control" placeholder="Atas dasar apa (cth: Konsumsi Piket, Uang Makan Harian)" value="{{ $k->ket_tunjangan_konsumsi ?? '' }}">
                                 </div>
                             </div>
                             <div class="mb-3">
@@ -254,6 +282,10 @@
                                     <span class="input-group-text">Rp</span>
                                     <input type="number" name="tarif_honor_kegiatan" class="form-control" value="{{ round($k->tarif_honor_kegiatan ?? 0) }}">
                                 </div>
+                                <div class="input-group input-group-sm mt-1">
+                                    <span class="input-group-text text-muted bg-light">Keterangan</span>
+                                    <input type="text" name="ket_honor_kegiatan" class="form-control" placeholder="Atas dasar apa (cth: Kegiatan Parenting, Panitia Lomba)" value="{{ $k->ket_honor_kegiatan ?? '' }}">
+                                </div>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Honor Ekstrakurikuler (Guru)</label>
@@ -261,12 +293,20 @@
                                     <span class="input-group-text">Rp</span>
                                     <input type="number" name="tarif_ekskul" class="form-control" value="{{ round($k->tarif_ekskul ?? 0) }}">
                                 </div>
+                                <div class="input-group input-group-sm mt-1">
+                                    <span class="input-group-text text-muted bg-light">Keterangan</span>
+                                    <input type="text" name="ket_honor_ekskul" class="form-control" placeholder="Atas dasar apa (cth: Pembina Ekskul Tari, Menggambar)" value="{{ $k->ket_honor_ekskul ?? '' }}">
+                                </div>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Tarif Lembur (Bunda TPA)</label>
                                 <div class="input-group">
                                     <span class="input-group-text">Rp</span>
                                     <input type="number" name="tarif_lembur" class="form-control" value="{{ round($k->tarif_lembur ?? 0) }}">
+                                </div>
+                                <div class="input-group input-group-sm mt-1">
+                                    <span class="input-group-text text-muted bg-light">Keterangan</span>
+                                    <input type="text" name="ket_tarif_lembur" class="form-control" placeholder="Atas dasar apa (cth: Lembur Sore Penjemputan Anak)" value="{{ $k->ket_tarif_lembur ?? '' }}">
                                 </div>
                             </div>
 
@@ -303,6 +343,10 @@
                                     <span class="input-group-text">Rp</span>
                                     <input type="number" name="potongan_kasbon" class="form-control" value="{{ round($k->potongan_kasbon ?? 0) }}" placeholder="Contoh: 400000">
                                 </div>
+                                <div class="input-group input-group-sm mt-1">
+                                    <span class="input-group-text text-muted bg-light">Keterangan</span>
+                                    <input type="text" name="ket_potongan_kasbon" class="form-control" placeholder="Atas dasar apa (cth: Angsuran Pinjaman Koperasi)" value="{{ $k->ket_potongan_kasbon ?? '' }}">
+                                </div>
                                 <small class="text-muted">Potongan angsuran kasbon/pinjaman tetap per bulan (contoh di Excel: Dwi Retno Rp 400.000, Cindy Novalita Rp 200.000).</small>
                             </div>
                             <div class="mb-3">
@@ -317,6 +361,10 @@
                                 <div class="input-group">
                                     <span class="input-group-text">Rp</span>
                                     <input type="number" name="potongan_lainnya" class="form-control" value="{{ round($k->potongan_lainnya ?? 0) }}" placeholder="0">
+                                </div>
+                                <div class="input-group input-group-sm mt-1">
+                                    <span class="input-group-text text-muted bg-light">Keterangan</span>
+                                    <input type="text" name="ket_potongan_lainnya" class="form-control" placeholder="Atas dasar apa (cth: Sanksi / Penyesuaian lainnya)" value="{{ $k->ket_potongan_lainnya ?? '' }}">
                                 </div>
                             </div>
 

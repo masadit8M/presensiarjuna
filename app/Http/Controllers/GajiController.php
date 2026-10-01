@@ -70,6 +70,23 @@ class GajiController extends Controller
                     $table->decimal('hak_pool_spp', 12, 2)->default(0)->after('insentif_pagi');
                 });
             }
+
+            $masterKetCols = [
+                'ket_tunjangan_jabatan',
+                'ket_tunjangan_konsumsi',
+                'ket_honor_kegiatan',
+                'ket_honor_ekskul',
+                'ket_tarif_lembur',
+                'ket_potongan_kasbon',
+                'ket_potongan_lainnya',
+            ];
+            foreach ($masterKetCols as $col) {
+                if (!Schema::hasColumn('gaji_master', $col)) {
+                    Schema::table('gaji_master', function (Blueprint $table) use ($col) {
+                        $table->string($col, 255)->nullable();
+                    });
+                }
+            }
         }
 
         if (!Schema::hasTable('penggajian_periode')) {
@@ -106,20 +123,29 @@ class GajiController extends Controller
                 $table->decimal('gaji_pokok', 12, 2)->default(0);
                 $table->decimal('tunjangan_transportasi', 12, 2)->default(0);
                 $table->decimal('tunjangan_jabatan', 12, 2)->default(0);
+                $table->string('ket_tunjangan_jabatan', 255)->nullable();
                 $table->decimal('tunjangan_konsumsi', 12, 2)->default(0);
+                $table->string('ket_tunjangan_konsumsi', 255)->nullable();
                 $table->decimal('tunjangan_kehadiran', 12, 2)->default(0);
                 $table->decimal('tunjangan_lainnya', 12, 2)->default(0);
+                $table->string('ket_tunjangan_lainnya', 255)->nullable();
                 $table->decimal('honor_kegiatan', 12, 2)->default(0);
+                $table->string('ket_honor_kegiatan', 255)->nullable();
                 $table->decimal('honor_ekskul', 12, 2)->default(0);
+                $table->string('ket_honor_ekskul', 255)->nullable();
                 $table->decimal('upah_lembur', 12, 2)->default(0);
+                $table->string('ket_upah_lembur', 255)->nullable();
                 $table->decimal('insentif_pool_tpa', 12, 2)->default(0);
                 $table->decimal('reward_disiplin', 12, 2)->default(0);
                 $table->decimal('bonus_tambahan', 12, 2)->default(0);
+                $table->string('ket_bonus_tambahan', 255)->nullable();
                 $table->decimal('potongan_absen', 12, 2)->default(0);
                 $table->decimal('potongan_terlambat', 12, 2)->default(0);
                 $table->decimal('potongan_kasbon', 12, 2)->default(0);
+                $table->string('ket_potongan_kasbon', 255)->nullable();
                 $table->decimal('potongan_bpjs', 12, 2)->default(0);
                 $table->decimal('potongan_lainnya', 12, 2)->default(0);
+                $table->string('ket_potongan_lainnya', 255)->nullable();
                 $table->decimal('total_penghasilan', 12, 2)->default(0);
                 $table->decimal('total_potongan', 12, 2)->default(0);
                 $table->decimal('gaji_bersih', 12, 2)->default(0);
@@ -129,6 +155,25 @@ class GajiController extends Controller
                 $table->string('pdf_path', 255)->nullable();
                 $table->timestamps();
             });
+        } else {
+            $detailKetCols = [
+                'ket_tunjangan_jabatan',
+                'ket_tunjangan_konsumsi',
+                'ket_honor_kegiatan',
+                'ket_honor_ekskul',
+                'ket_upah_lembur',
+                'ket_bonus_tambahan',
+                'ket_tunjangan_lainnya',
+                'ket_potongan_kasbon',
+                'ket_potongan_lainnya',
+            ];
+            foreach ($detailKetCols as $col) {
+                if (!Schema::hasColumn('penggajian_detail', $col)) {
+                    Schema::table('penggajian_detail', function (Blueprint $table) use ($col) {
+                        $table->string($col, 255)->nullable();
+                    });
+                }
+            }
         }
     }
 
@@ -426,20 +471,29 @@ class GajiController extends Controller
                 'gaji_pokok' => $gapok,
                 'tunjangan_transportasi' => $tunjTransport,
                 'tunjangan_jabatan' => $tunjJabatan,
+                'ket_tunjangan_jabatan' => $master->ket_tunjangan_jabatan ?? null,
                 'tunjangan_konsumsi' => $tunjKonsumsi,
+                'ket_tunjangan_konsumsi' => $master->ket_tunjangan_konsumsi ?? null,
                 'tunjangan_kehadiran' => $tunjKehadiran,
                 'tunjangan_lainnya' => 0,
+                'ket_tunjangan_lainnya' => null,
                 'honor_kegiatan' => $honorKegiatan,
+                'ket_honor_kegiatan' => $master->ket_honor_kegiatan ?? null,
                 'honor_ekskul' => $honorEkskul,
+                'ket_honor_ekskul' => $master->ket_honor_ekskul ?? null,
                 'upah_lembur' => $upahLembur,
+                'ket_upah_lembur' => $master->ket_tarif_lembur ?? null,
                 'insentif_pool_tpa' => $insentifPoolTpa,
                 'reward_disiplin' => $rewardDisiplin,
                 'bonus_tambahan' => 0,
+                'ket_bonus_tambahan' => null,
                 'potongan_absen' => $potonganAbsen,
                 'potongan_terlambat' => $potonganTerlambat,
                 'potongan_kasbon' => $potonganKasbon,
+                'ket_potongan_kasbon' => $master->ket_potongan_kasbon ?? null,
                 'potongan_bpjs' => $potonganBpjs,
                 'potongan_lainnya' => $potonganLainnya,
+                'ket_potongan_lainnya' => $master->ket_potongan_lainnya ?? null,
                 'total_penghasilan' => $totalPenghasilan,
                 'total_potongan' => $totalPotongan,
                 'gaji_bersih' => $gajiBersih,
@@ -562,20 +616,29 @@ class GajiController extends Controller
             'gaji_pokok' => $gapok,
             'tunjangan_transportasi' => $tunjTransport,
             'tunjangan_jabatan' => $tunjJabatan,
+            'ket_tunjangan_jabatan' => $request->ket_tunjangan_jabatan,
             'tunjangan_konsumsi' => $tunjKonsumsi,
+            'ket_tunjangan_konsumsi' => $request->ket_tunjangan_konsumsi,
             'tunjangan_kehadiran' => $tunjKehadiran,
             'tunjangan_lainnya' => $tunjLain,
+            'ket_tunjangan_lainnya' => $request->ket_tunjangan_lainnya,
             'honor_kegiatan' => $honorKegiatan,
+            'ket_honor_kegiatan' => $request->ket_honor_kegiatan,
             'honor_ekskul' => $honorEkskul,
+            'ket_honor_ekskul' => $request->ket_honor_ekskul,
             'upah_lembur' => $upahLembur,
+            'ket_upah_lembur' => $request->ket_upah_lembur,
             'insentif_pool_tpa' => $insentifPool,
             'reward_disiplin' => $rewardDisiplin,
             'bonus_tambahan' => $bonus,
+            'ket_bonus_tambahan' => $request->ket_bonus_tambahan,
             'potongan_absen' => $potAbsen,
             'potongan_terlambat' => $potTerlambat,
             'potongan_kasbon' => $potKasbon,
+            'ket_potongan_kasbon' => $request->ket_potongan_kasbon,
             'potongan_bpjs' => $potBpjs,
             'potongan_lainnya' => $potLain,
+            'ket_potongan_lainnya' => $request->ket_potongan_lainnya,
             'total_penghasilan' => $totalPenghasilan,
             'total_potongan' => $totalPotongan,
             'gaji_bersih' => $gajiBersih,
@@ -1067,7 +1130,14 @@ class GajiController extends Controller
                 'gaji_master.potongan_lainnya',
                 'gaji_master.gaji_harian',
                 'gaji_master.insentif_pagi',
-                'gaji_master.hak_pool_spp'
+                'gaji_master.hak_pool_spp',
+                'gaji_master.ket_tunjangan_jabatan',
+                'gaji_master.ket_tunjangan_konsumsi',
+                'gaji_master.ket_honor_kegiatan',
+                'gaji_master.ket_honor_ekskul',
+                'gaji_master.ket_tarif_lembur',
+                'gaji_master.ket_potongan_kasbon',
+                'gaji_master.ket_potongan_lainnya'
             )
             ->orderBy('karyawan.nama_lengkap', 'asc')
             ->get();
@@ -1190,6 +1260,14 @@ class GajiController extends Controller
         $hakPoolSpp = str_replace(['.', ','], '', $request->hak_pool_spp ?? 0);
         $gajiHarian = round(($gapok + $tunjTransport) / 26, 2);
 
+        $ketTunjJabatan = $request->ket_tunjangan_jabatan ?? null;
+        $ketTunjKonsumsi = $request->ket_tunjangan_konsumsi ?? null;
+        $ketHonorKegiatan = $request->ket_honor_kegiatan ?? null;
+        $ketHonorEkskul = $request->ket_honor_ekskul ?? null;
+        $ketTarifLembur = $request->ket_tarif_lembur ?? null;
+        $ketPotonganKasbon = $request->ket_potongan_kasbon ?? null;
+        $ketPotonganLainnya = $request->ket_potongan_lainnya ?? null;
+
         // Find all NIKs associated with this person
         $currentKaryawan = DB::table('karyawan')->where('nik', $nik)->first();
         $allNiks = [$nik];
@@ -1208,13 +1286,20 @@ class GajiController extends Controller
                     'tunjangan_transportasi' => $tunjTransport,
                     'gaji_harian' => $gajiHarian,
                     'tunjangan_jabatan' => $tunjJabatan,
+                    'ket_tunjangan_jabatan' => $ketTunjJabatan,
                     'tunjangan_konsumsi' => $tunjKonsumsi,
+                    'ket_tunjangan_konsumsi' => $ketTunjKonsumsi,
                     'tarif_honor_kegiatan' => $honorKegiatan,
+                    'ket_honor_kegiatan' => $ketHonorKegiatan,
                     'tarif_ekskul' => $honorEkskul,
+                    'ket_honor_ekskul' => $ketHonorEkskul,
                     'tarif_lembur' => $upahLembur,
+                    'ket_tarif_lembur' => $ketTarifLembur,
                     'potongan_kasbon' => $potonganKasbon,
+                    'ket_potongan_kasbon' => $ketPotonganKasbon,
                     'bpjs_kesehatan' => $bpjsKesehatan,
                     'potongan_lainnya' => $potonganLainnya,
+                    'ket_potongan_lainnya' => $ketPotonganLainnya,
                     'insentif_pagi' => $insentifPagi,
                     'hak_pool_spp' => $hakPoolSpp,
                     'updated_at' => now(),
@@ -1226,13 +1311,20 @@ class GajiController extends Controller
                     'tunjangan_transportasi' => $tunjTransport,
                     'gaji_harian' => $gajiHarian,
                     'tunjangan_jabatan' => $tunjJabatan,
+                    'ket_tunjangan_jabatan' => $ketTunjJabatan,
                     'tunjangan_konsumsi' => $tunjKonsumsi,
+                    'ket_tunjangan_konsumsi' => $ketTunjKonsumsi,
                     'tarif_honor_kegiatan' => $honorKegiatan,
+                    'ket_honor_kegiatan' => $ketHonorKegiatan,
                     'tarif_ekskul' => $honorEkskul,
+                    'ket_honor_ekskul' => $ketHonorEkskul,
                     'tarif_lembur' => $upahLembur,
+                    'ket_tarif_lembur' => $ketTarifLembur,
                     'potongan_kasbon' => $potonganKasbon,
+                    'ket_potongan_kasbon' => $ketPotonganKasbon,
                     'bpjs_kesehatan' => $bpjsKesehatan,
                     'potongan_lainnya' => $potonganLainnya,
+                    'ket_potongan_lainnya' => $ketPotonganLainnya,
                     'insentif_pagi' => $insentifPagi,
                     'hak_pool_spp' => $hakPoolSpp,
                     'created_at' => now(),
