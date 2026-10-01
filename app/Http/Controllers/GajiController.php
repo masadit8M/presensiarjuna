@@ -714,7 +714,7 @@ class GajiController extends Controller
     }
 
     /**
-     * Send slip document (.pdf) via WhatsApp Gateway.
+     * Send slip document (.pdf) via WhatsApp Direct (wa.me) or Gateway.
      */
     public function kirimWa($id)
     {
@@ -740,12 +740,24 @@ class GajiController extends Controller
         $phone = preg_replace('/[^0-9]/', '', $detail->no_hp);
         if (str_starts_with($phone, '0')) {
             $phone = '62' . substr($phone, 1);
+        } elseif (str_starts_with($phone, '8')) {
+            $phone = '62' . $phone;
         }
 
         // Generate PDF
         $pdfRelPath = SlipPdfService::generatePdf($detail);
-        DB::table('penggajian_detail')->where('id', $id)->update(['pdf_path' => $pdfRelPath]);
-        $publicPdfUrl = url($pdfRelPath);
+        DB::table('penggajian_detail')->where('id', $id)->update([
+            'pdf_path' => $pdfRelPath,
+            'status_kirim_wa' => 1,
+            'waktu_kirim_wa' => now(),
+        ]);
+
+        // Build absolute public PDF download URL
+        $host = request()->getSchemeAndHttpHost();
+        if (str_contains($host, 'localhost') && config('app.url') && !str_contains(config('app.url'), 'localhost')) {
+            $host = rtrim(config('app.url'), '/');
+        }
+        $publicPdfUrl = rtrim($host, '/') . '/' . ltrim($pdfRelPath, '/');
 
         // Prepare professional WhatsApp message text
         $msg = "Assalamu'alaikum Wr. Wb.\n";
@@ -757,32 +769,33 @@ class GajiController extends Controller
         $msg .= "------------------------------------\n";
         $msg .= "💵 *Gaji Bersih (THP):* Rp " . number_format($detail->gaji_bersih, 0, ',', '.') . "\n";
         $msg .= "------------------------------------\n";
-        $msg .= "File dokumen resmi .pdf terlampir pada pesan ini.\n\n";
+        $msg .= "📄 *Unduh Dokumen PDF Resmi:*\n";
+        $msg .= $publicPdfUrl . "\n\n";
         $msg .= "_Dibuat oleh: Kartika P. (Bendahara Yayasan)_\n";
         $msg .= "_PAUD Arjuna Cendekia_";
 
-        $gatewayUrl = env('WA_GATEWAY_URL', 'https://wagateway.pedasalami.com/send-message');
+        // Direct WhatsApp Click-to-Chat (wa.me)
+        $waUrl = 'https://api.whatsapp.com/send?phone=' . $phone . '&text=' . rawurlencode($msg);
 
-        try {
-            $response = Http::timeout(15)->post($gatewayUrl, [
-                'number' => $phone,
-                'message' => $msg,
-                'file_dikirim' => $publicPdfUrl,
-            ]);
-
-            if ($response->successful()) {
-                DB::table('penggajian_detail')->where('id', $id)->update([
-                    'status_kirim_wa' => 1,
-                    'waktu_kirim_wa' => now(),
+        // Check if an external automated gateway URL is explicitly set (and not the defunct pedasalami URL)
+        $gatewayUrl = env('WA_GATEWAY_URL');
+        if (!empty($gatewayUrl) && !str_contains($gatewayUrl, 'pedasalami.com')) {
+            try {
+                $response = Http::timeout(10)->post($gatewayUrl, [
+                    'number' => $phone,
+                    'message' => $msg,
+                    'file_dikirim' => $publicPdfUrl,
                 ]);
 
-                return redirect()->back()->with(['success' => 'Dokumen PDF Slip Gaji berhasil dikirim ke WhatsApp ' . $detail->nama_lengkap . ' (' . $phone . ')']);
-            } else {
-                return redirect()->back()->with(['warning' => 'Gateway merespons: ' . $response->body() . '. Silakan periksa koneksi WhatsApp Gateway.']);
+                if ($response->successful()) {
+                    return redirect()->back()->with(['success' => 'Dokumen PDF Slip Gaji berhasil dikirim ke WhatsApp ' . $detail->nama_lengkap . ' (' . $phone . ')']);
+                }
+            } catch (\Exception $e) {
+                // If automated gateway fails, redirect to direct waUrl
             }
-        } catch (\Exception $e) {
-            return redirect()->back()->with(['warning' => 'Gagal menghubungi WhatsApp Gateway (' . $e->getMessage() . '). Anda dapat mendownload PDF atau mengirim manual.']);
         }
+
+        return redirect()->away($waUrl);
     }
 
     /**
@@ -798,9 +811,13 @@ class GajiController extends Controller
             ->select('penggajian_detail.id')
             ->get();
 
-        $successCount = 0;
+        $gatewayUrl = env('WA_GATEWAY_URL');
+        $hasGateway = !empty($gatewayUrl) && !str_contains($gatewayUrl, 'pedasalami.com');
+
+        $generatedCount = 0;
+        $sentCount = 0;
+
         foreach ($details as $d) {
-            // Send each
             $detail = DB::table('penggajian_detail')
                 ->join('karyawan', 'penggajian_detail.nik', '=', 'karyawan.nik')
                 ->join('penggajian_periode', 'penggajian_detail.periode_id', '=', 'penggajian_periode.id')
@@ -809,47 +826,61 @@ class GajiController extends Controller
                 ->select('penggajian_detail.*', 'karyawan.nama_lengkap', 'karyawan.no_hp', 'penggajian_periode.nama_periode', 'penggajian_periode.tgl_selesai', 'cabang.nama_cabang')
                 ->first();
 
-            if ($detail && !empty($detail->no_hp)) {
-                $phone = preg_replace('/[^0-9]/', '', $detail->no_hp);
-                if (str_starts_with($phone, '0')) {
-                    $phone = '62' . substr($phone, 1);
-                }
-
+            if ($detail) {
                 $pdfRelPath = SlipPdfService::generatePdf($detail);
                 DB::table('penggajian_detail')->where('id', $d->id)->update(['pdf_path' => $pdfRelPath]);
-                $publicPdfUrl = url($pdfRelPath);
+                $generatedCount++;
 
-                $msg = "Assalamu'alaikum Wr. Wb.\n";
-                $msg .= "Yth. *" . strtoupper($detail->nama_lengkap) . "*,\n\n";
-                $msg .= "Berikut kami lampirkan dokumen resmi *SLIP GAJI* Anda:\n";
-                $msg .= "📋 *Periode:* " . $detail->nama_periode . "\n";
-                $msg .= "💵 *Gaji Bersih (THP):* Rp " . number_format($detail->gaji_bersih, 0, ',', '.') . "\n";
-                $msg .= "------------------------------------\n";
-                $msg .= "_Dibuat oleh: Kartika P. (Bendahara Yayasan)_\n";
-                $msg .= "_PAUD Arjuna Cendekia_";
-
-                $gatewayUrl = env('WA_GATEWAY_URL', 'https://wagateway.pedasalami.com/send-message');
-
-                try {
-                    $res = Http::timeout(10)->post($gatewayUrl, [
-                        'number' => $phone,
-                        'message' => $msg,
-                        'file_dikirim' => $publicPdfUrl,
-                    ]);
-                    if ($res->successful()) {
-                        DB::table('penggajian_detail')->where('id', $d->id)->update([
-                            'status_kirim_wa' => 1,
-                            'waktu_kirim_wa' => now(),
-                        ]);
-                        $successCount++;
+                if ($hasGateway && !empty($detail->no_hp)) {
+                    $phone = preg_replace('/[^0-9]/', '', $detail->no_hp);
+                    if (str_starts_with($phone, '0')) {
+                        $phone = '62' . substr($phone, 1);
+                    } elseif (str_starts_with($phone, '8')) {
+                        $phone = '62' . $phone;
                     }
-                } catch (\Exception $e) {
-                    // continue next
+
+                    $host = request()->getSchemeAndHttpHost();
+                    if (str_contains($host, 'localhost') && config('app.url') && !str_contains(config('app.url'), 'localhost')) {
+                        $host = rtrim(config('app.url'), '/');
+                    }
+                    $publicPdfUrl = rtrim($host, '/') . '/' . ltrim($pdfRelPath, '/');
+
+                    $msg = "Assalamu'alaikum Wr. Wb.\n";
+                    $msg .= "Yth. *" . strtoupper($detail->nama_lengkap) . "*,\n\n";
+                    $msg .= "Berikut kami sampaikan rincian dokumen resmi *SLIP GAJI* Anda:\n";
+                    $msg .= "📋 *Periode:* " . $detail->nama_periode . "\n";
+                    $msg .= "💵 *Gaji Bersih (THP):* Rp " . number_format($detail->gaji_bersih, 0, ',', '.') . "\n";
+                    $msg .= "------------------------------------\n";
+                    $msg .= "📄 *Unduh Dokumen PDF Resmi:*\n";
+                    $msg .= $publicPdfUrl . "\n\n";
+                    $msg .= "_Dibuat oleh: Kartika P. (Bendahara Yayasan)_\n";
+                    $msg .= "_PAUD Arjuna Cendekia_";
+
+                    try {
+                        $res = Http::timeout(8)->post($gatewayUrl, [
+                            'number' => $phone,
+                            'message' => $msg,
+                            'file_dikirim' => $publicPdfUrl,
+                        ]);
+                        if ($res->successful()) {
+                            DB::table('penggajian_detail')->where('id', $d->id)->update([
+                                'status_kirim_wa' => 1,
+                                'waktu_kirim_wa' => now(),
+                            ]);
+                            $sentCount++;
+                        }
+                    } catch (\Exception $e) {
+                        // continue next
+                    }
                 }
             }
         }
 
-        return redirect()->back()->with(['success' => 'Proses kirim WA massal selesai. ' . $successCount . ' slip berhasil terkirim.']);
+        if ($hasGateway) {
+            return redirect()->back()->with(['success' => 'Proses kirim WA selesai. ' . $sentCount . ' dari ' . $generatedCount . ' slip berhasil terkirim via Gateway.']);
+        }
+
+        return redirect()->back()->with(['success' => 'Seluruh dokumen PDF slip gaji (' . $generatedCount . ' karyawan) telah di-generate. Silakan klik tombol hijau "WA" pada setiap baris karyawan untuk mengirim langsung via WhatsApp.']);
     }
 
     /**

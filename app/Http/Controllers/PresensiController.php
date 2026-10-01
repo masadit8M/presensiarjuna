@@ -257,23 +257,23 @@ class PresensiController extends Controller
                         echo "success|Terimkasih, Hati Hati Di Jalan|out";
                         Storage::put($file, $image_base64);
 
-                        $curl = curl_init();
-
-                        curl_setopt_array($curl, array(
-                            CURLOPT_URL => 'https://wagateway.pedasalami.com/send-message',
-                            CURLOPT_RETURNTRANSFER => true,
-                            CURLOPT_ENCODING => '',
-                            CURLOPT_MAXREDIRS => 10,
-                            CURLOPT_TIMEOUT => 0,
-                            CURLOPT_FOLLOWLOCATION => true,
-                            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-                            CURLOPT_CUSTOMREQUEST => 'POST',
-                            CURLOPT_POSTFIELDS => array('message' => 'Terimakasih Sudah Melakukan Absen Pulang, Anda Melakukan Absen Pada Jam ' . $jam, 'number' => $no_hp, 'file_dikirim' => ''),
-                        ));
-
-                        $response = curl_exec($curl);
-
-                        curl_close($curl);
+                        $gatewayUrl = env('WA_GATEWAY_URL');
+                        if (!empty($gatewayUrl) && !str_contains($gatewayUrl, 'pedasalami.com')) {
+                            $curl = curl_init();
+                            curl_setopt_array($curl, array(
+                                CURLOPT_URL => $gatewayUrl,
+                                CURLOPT_RETURNTRANSFER => true,
+                                CURLOPT_ENCODING => '',
+                                CURLOPT_MAXREDIRS => 5,
+                                CURLOPT_TIMEOUT => 3,
+                                CURLOPT_FOLLOWLOCATION => true,
+                                CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+                                CURLOPT_CUSTOMREQUEST => 'POST',
+                                CURLOPT_POSTFIELDS => array('message' => 'Terimakasih Sudah Melakukan Absen Pulang, Anda Melakukan Absen Pada Jam ' . $jam, 'number' => $no_hp, 'file_dikirim' => ''),
+                            ));
+                            $response = curl_exec($curl);
+                            curl_close($curl);
+                        }
                         //echo $response;
                     } else {
                         echo "error|Maaf Gagal absen, Hubungi Tim It|out";
@@ -298,23 +298,23 @@ class PresensiController extends Controller
                     if ($simpan) {
                         echo "success|Terimkasih, Selamat Bekerja|in";
 
-                        $curl = curl_init();
-
-                        curl_setopt_array($curl, array(
-                            CURLOPT_URL => 'https://wagateway.pedasalami.com/send-message',
-                            CURLOPT_RETURNTRANSFER => true,
-                            CURLOPT_ENCODING => '',
-                            CURLOPT_MAXREDIRS => 10,
-                            CURLOPT_TIMEOUT => 0,
-                            CURLOPT_FOLLOWLOCATION => true,
-                            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-                            CURLOPT_CUSTOMREQUEST => 'POST',
-                            CURLOPT_POSTFIELDS => array('message' => 'Terimakasih Sudah Melakukan Absen Masuk, Anda Melakukan Absen Pada Jam ' . $jam, 'number' => $no_hp, 'file_dikirim' => ''),
-                        ));
-
-                        $response = curl_exec($curl);
-
-                        curl_close($curl);
+                        $gatewayUrl = env('WA_GATEWAY_URL');
+                        if (!empty($gatewayUrl) && !str_contains($gatewayUrl, 'pedasalami.com')) {
+                            $curl = curl_init();
+                            curl_setopt_array($curl, array(
+                                CURLOPT_URL => $gatewayUrl,
+                                CURLOPT_RETURNTRANSFER => true,
+                                CURLOPT_ENCODING => '',
+                                CURLOPT_MAXREDIRS => 5,
+                                CURLOPT_TIMEOUT => 3,
+                                CURLOPT_FOLLOWLOCATION => true,
+                                CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+                                CURLOPT_CUSTOMREQUEST => 'POST',
+                                CURLOPT_POSTFIELDS => array('message' => 'Terimakasih Sudah Melakukan Absen Masuk, Anda Melakukan Absen Pada Jam ' . $jam, 'number' => $no_hp, 'file_dikirim' => ''),
+                            ));
+                            $response = curl_exec($curl);
+                            curl_close($curl);
+                        }
                         //echo $response;
                         Storage::put($file, $image_base64);
                     } else {

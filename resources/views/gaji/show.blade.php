@@ -223,13 +223,11 @@
                                         PDF
                                     </a>
 
-                                    {{-- Kirim Dokumen PDF via WA --}}
-                                    <form action="/gaji/kirimwa/{{ $d->id }}" method="POST" onsubmit="return confirm('Kirim dokumen PDF Slip Gaji ke {{ $d->nama_lengkap }} ({{ $d->no_hp }})?')">
-                                        @csrf
-                                        <button type="submit" class="btn btn-sm btn-success" title="Kirim Dokumen PDF via WhatsApp">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-brand-whatsapp m-0" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 21l1.65 -3.8a9 9 0 1 1 3.4 2.9l-5.05 .9"/><path d="M9 10a.5 .5 0 0 0 1 0v-1a.5 .5 0 0 0 -1 0v1a5 5 0 0 0 5 5h1a.5 .5 0 0 0 0 -1h-1a.5 .5 0 0 0 0 1"/></svg>
-                                        </button>
-                                    </form>
+                                    {{-- Kirim Dokumen PDF via WhatsApp (wa.me) --}}
+                                    <a href="/gaji/kirimwa/{{ $d->id }}" target="_blank" class="btn btn-sm btn-success" title="Kirim Slip Gaji via WhatsApp" onclick="return confirm('Buka WhatsApp untuk kirim Slip Gaji ke {{ $d->nama_lengkap }} ({{ $d->no_hp ?: 'nomor belum diisi' }})?')">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-brand-whatsapp m-0" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 21l1.65 -3.8a9 9 0 1 1 3.4 2.9l-5.05 .9"/><path d="M9 10a.5 .5 0 0 0 1 0v-1a.5 .5 0 0 0 -1 0v1a5 5 0 0 0 5 5h1a.5 .5 0 0 0 0 -1h-1a.5 .5 0 0 0 0 1"/></svg>
+                                        WA
+                                    </a>
                                 </div>
                             </td>
                         </tr>
