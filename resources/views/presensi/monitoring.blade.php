@@ -1,5 +1,24 @@
 @extends('layouts.admin.tabler')
 @section('content')
+<style>
+    .table-responsive {
+        max-height: 60vh !important;
+        overflow-y: auto !important;
+        overflow-x: auto !important;
+        display: block !important;
+        width: 100% !important;
+    }
+    .table-responsive table {
+        white-space: nowrap !important;
+    }
+    .table-responsive thead th {
+        position: sticky !important;
+        top: 0 !important;
+        background-color: #fff !important;
+        z-index: 2 !important;
+        box-shadow: 0 1px 1px -1px rgba(0,0,0,0.1) !important;
+    }
+</style>
     <div class="page-header d-print-none">
         <div class="container-fluid">
             <div class="row g-2 align-items-center">

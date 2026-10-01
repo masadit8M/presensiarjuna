@@ -113,6 +113,14 @@ class PresensiController extends Controller
                         ->where('kode_cabang', $kode_cabang)
                         ->where('hari', $namahari)->first();
                 }
+                
+                // Fallback to Role Jam Kerja
+                if ($jamkerja == null) {
+                    $dtkaryawan = DB::table('karyawan')->where('nik', $nik)->first();
+                    if (isset($dtkaryawan->role_jam_kerja) && !empty($dtkaryawan->role_jam_kerja)) {
+                        $jamkerja = DB::table('jam_kerja')->where('nama_jam_kerja', $dtkaryawan->role_jam_kerja)->first();
+                    }
+                }
             }
         } else {
             $jamkerja = DB::table('jam_kerja')->where('kode_jam_kerja', $kode_jam_kerja)->first();
@@ -191,6 +199,14 @@ class PresensiController extends Controller
                         ->where('kode_cabang', $kode_cabang)
                         ->where('hari', $namahari)->first();
                 }
+                
+                // Fallback to Role Jam Kerja
+                if ($jamkerja == null) {
+                    $dtkaryawan = DB::table('karyawan')->where('nik', $nik)->first();
+                    if (isset($dtkaryawan->role_jam_kerja) && !empty($dtkaryawan->role_jam_kerja)) {
+                        $jamkerja = DB::table('jam_kerja')->where('nama_jam_kerja', $dtkaryawan->role_jam_kerja)->first();
+                    }
+                }
             }
         } else {
             $jamkerja = DB::table('jam_kerja')->where('kode_jam_kerja', $kode_jam_kerja)->first();
@@ -219,7 +235,10 @@ class PresensiController extends Controller
         $jamkerja_pulang = $tgl_pulang . " " . $jamkerja->jam_pulang;
         $datakaryawan = DB::table('karyawan')->where('nik', $nik)->first();
         $no_hp = $datakaryawan->no_hp;
-        if ($status_location == 1 && $radius > $lok_kantor->radius_cabang) {
+        
+        $isKepalaSekolah = (isset($datakaryawan->role_jam_kerja) && strtolower($datakaryawan->role_jam_kerja) == 'kepala sekolah');
+
+        if (!$isKepalaSekolah && $status_location == 1 && $radius > $lok_kantor->radius_cabang) {
             echo "error|Maaf Anda Berada Diluar Radius, Jarak Anda " . $radius . " meter dari Kantor|radius";
         } else {
             if ($cek > 0) {

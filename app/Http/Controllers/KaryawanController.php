@@ -17,6 +17,11 @@ class KaryawanController extends Controller
 {
     public function index(Request $request)
     {
+        if (!\Illuminate\Support\Facades\Schema::hasColumn('karyawan', 'role_jam_kerja')) {
+            \Illuminate\Support\Facades\Schema::table('karyawan', function ($table) {
+                $table->string('role_jam_kerja')->nullable()->default('Normal');
+            });
+        }
         $kode_dept = Auth::guard('user')->user()->kode_dept;
         $kode_cabang = Auth::guard('user')->user()->kode_cabang;
         $user = User::find(Auth::guard('user')->user()->id);
@@ -53,6 +58,7 @@ class KaryawanController extends Controller
         $nik = $request->nik;
         $nama_lengkap = $request->nama_lengkap;
         $jabatan = $request->jabatan;
+        $role_jam_kerja = $request->role_jam_kerja;
         $no_hp = $request->no_hp;
         $kode_dept = $request->kode_dept;
         $password = Hash::make('12345');
@@ -68,6 +74,7 @@ class KaryawanController extends Controller
                 'nik' => $nik,
                 'nama_lengkap' => $nama_lengkap,
                 'jabatan' => $jabatan,
+                'role_jam_kerja' => $role_jam_kerja,
                 'no_hp' => $no_hp,
                 'kode_dept' => $kode_dept,
                 'foto' => $foto,
@@ -108,6 +115,7 @@ class KaryawanController extends Controller
         $nik_baru = $request->nik_baru;
         $nama_lengkap = $request->nama_lengkap;
         $jabatan = $request->jabatan;
+        $role_jam_kerja = $request->role_jam_kerja;
         $no_hp = $request->no_hp;
         $kode_dept = $request->kode_dept;
         $kode_cabang = $request->kode_cabang;
@@ -132,6 +140,7 @@ class KaryawanController extends Controller
                 'nik' => $nik_baru,
                 'nama_lengkap' => $nama_lengkap,
                 'jabatan' => $jabatan,
+                'role_jam_kerja' => $role_jam_kerja,
                 'no_hp' => $no_hp,
                 'kode_dept' => $kode_dept,
                 'foto' => $foto,

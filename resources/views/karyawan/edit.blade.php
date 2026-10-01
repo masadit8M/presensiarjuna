@@ -92,6 +92,15 @@
     </div>
     <div class="row mt-2">
         <div class="col-12">
+            <select name="role_jam_kerja" id="role_jam_kerja" class="form-select">
+                <option value="Normal" {{ isset($karyawan->role_jam_kerja) && $karyawan->role_jam_kerja == 'Normal' ? 'selected' : '' }}>Role Jam Kerja: Normal</option>
+                <option value="Guru" {{ isset($karyawan->role_jam_kerja) && $karyawan->role_jam_kerja == 'Guru' ? 'selected' : '' }}>Role Jam Kerja: Guru</option>
+                <option value="Kepala Sekolah" {{ isset($karyawan->role_jam_kerja) && $karyawan->role_jam_kerja == 'Kepala Sekolah' ? 'selected' : '' }}>Role Jam Kerja: Kepala Sekolah</option>
+            </select>
+        </div>
+    </div>
+    <div class="row mt-2">
+        <div class="col-12">
             <select name="kode_dept" id="kode_dept" class="form-select">
                 <option value="">Departemen</option>
                 @foreach ($departemen as $d)

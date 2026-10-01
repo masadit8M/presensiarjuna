@@ -1,5 +1,24 @@
 @extends('layouts.admin.tabler')
 @section('content')
+<style>
+    .table-responsive {
+        max-height: 60vh !important;
+        overflow-y: auto !important;
+        overflow-x: auto !important;
+        display: block !important;
+        width: 100% !important;
+    }
+    .table-responsive table {
+        white-space: nowrap !important;
+    }
+    .table-responsive thead th {
+        position: sticky !important;
+        top: 0 !important;
+        background-color: #fff !important;
+        z-index: 2 !important;
+        box-shadow: 0 1px 1px -1px rgba(0,0,0,0.1) !important;
+    }
+</style>
     <div class="page-header d-print-none">
         <div class="container-xl">
             <div class="row g-2 align-items-center">
@@ -112,8 +131,9 @@
                             </div>
                             <div class="row mt-2">
                                 <div class="col-12">
-                                    <table class="table table-bordered">
-                                        <thead>
+                                    <div class="table-responsive">
+                                        <table class="table table-bordered">
+                                            <thead>
                                             <tr>
                                                 <th>No</th>
                                                 <th>NIK</th>
@@ -352,7 +372,8 @@
                                                 </tr>
                                             @endforeach
                                         </tbody>
-                                    </table>
+                                        </table>
+                                    </div>
                                     {{ $karyawan->links('vendor.pagination.bootstrap-5') }}
                                 </div>
                             </div>
@@ -466,6 +487,15 @@
                         <div class="row mt-2">
                             <div class="col-12">
                                 <input type="file" name="foto" class="form-control">
+                            </div>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col-12">
+                                <select name="role_jam_kerja" id="role_jam_kerja" class="form-select">
+                                    <option value="Normal">Role Jam Kerja: Normal</option>
+                                    <option value="Guru">Role Jam Kerja: Guru</option>
+                                    <option value="Kepala Sekolah">Role Jam Kerja: Kepala Sekolah</option>
+                                </select>
                             </div>
                         </div>
                         <div class="row mt-2">

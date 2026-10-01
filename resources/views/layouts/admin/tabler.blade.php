@@ -32,6 +32,29 @@
             font-feature-settings: "cv03", "cv04", "cv11";
         }
 
+        .table-responsive {
+            max-height: 60vh !important;
+            overflow-y: auto !important;
+            overflow-x: auto !important;
+            display: block !important;
+            width: 100% !important;
+            /* Optional styling for better look */
+            border: 1px solid rgba(0,0,0,.125);
+            border-radius: 4px;
+        }
+        
+        .table-responsive table {
+            white-space: nowrap !important;
+        }
+
+        .table-responsive thead th {
+            position: sticky !important;
+            top: 0 !important;
+            background-color: #fff !important;
+            z-index: 2 !important;
+            box-shadow: 0 1px 1px -1px rgba(0,0,0,0.1) !important;
+        }
+
     </style>
 </head>
 <body>
