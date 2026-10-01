@@ -32,27 +32,22 @@
             font-feature-settings: "cv03", "cv04", "cv11";
         }
 
-        .table-responsive {
-            max-height: 60vh !important;
-            overflow-y: auto !important;
-            overflow-x: auto !important;
-            display: block !important;
-            width: 100% !important;
-            /* Optional styling for better look */
-            border: 1px solid rgba(0,0,0,.125);
-            border-radius: 4px;
-        }
-        
         .table-responsive table {
             white-space: nowrap !important;
         }
 
-        .table-responsive thead th {
-            position: sticky !important;
-            top: 0 !important;
-            background-color: #fff !important;
-            z-index: 2 !important;
-            box-shadow: 0 1px 1px -1px rgba(0,0,0,0.1) !important;
+        /* Floating top scrollbar */
+        .floating-scrollbar-wrapper {
+            overflow-x: auto;
+            overflow-y: hidden;
+            position: sticky;
+            bottom: 0;
+            z-index: 100;
+            background: #f8f9fa;
+            border-top: 1px solid #dee2e6;
+        }
+        .floating-scrollbar-inner {
+            height: 12px;
         }
 
     </style>
@@ -87,5 +82,84 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.3.0/js/bootstrap-datepicker.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js" integrity="sha256-WBkoXOwTeyKclOHuWtc+i2uENFpDZ9YPdf5Hf+D7ewM=" crossorigin=""></script>
     @stack('myscript')
+
+    {{-- Floating Horizontal Scrollbar for wide tables --}}
+    <script>
+    $(document).ready(function() {
+        function initFloatingScrollbar() {
+            // Find all wide tables (tables wider than their container)
+            $('table').each(function() {
+                var $table = $(this);
+                var $parent = $table.parent();
+
+                // Skip if already processed
+                if ($parent.hasClass('floating-scrollbar-processed')) return;
+                // Only process if table is wider than viewport
+                if ($table.width() <= $(window).width() - 200) return;
+
+                $parent.addClass('floating-scrollbar-processed');
+
+                // Create floating scrollbar element
+                var $scrollWrapper = $('<div class="floating-scrollbar-wrapper"></div>');
+                var $scrollInner = $('<div class="floating-scrollbar-inner"></div>');
+                $scrollWrapper.append($scrollInner);
+                $parent.after($scrollWrapper);
+
+                // Set width of inner div to match table width
+                function updateScrollWidth() {
+                    $scrollInner.width($table.width());
+                    var rect = $parent[0].getBoundingClientRect();
+                    $scrollWrapper.css({
+                        'width': $parent.outerWidth() + 'px',
+                        'margin-left': 0
+                    });
+                }
+                updateScrollWidth();
+
+                // Sync: floating scrollbar → table container
+                $scrollWrapper.on('scroll', function() {
+                    $parent.scrollLeft($scrollWrapper.scrollLeft());
+                });
+
+                // Sync: table container scroll → floating scrollbar  
+                $parent.on('scroll', function() {
+                    $scrollWrapper.scrollLeft($parent.scrollLeft());
+                });
+
+                // Show/hide based on table visibility in viewport
+                $(window).on('scroll resize', function() {
+                    var rect = $parent[0].getBoundingClientRect();
+                    var tableBottom = rect.bottom;
+                    var tableTop = rect.top;
+                    var windowHeight = $(window).height();
+
+                    // Show floating scrollbar if table extends beyond viewport
+                    if (tableTop < windowHeight && tableBottom > windowHeight) {
+                        $scrollWrapper.show();
+                    } else {
+                        $scrollWrapper.hide();
+                    }
+                    updateScrollWidth();
+                });
+
+                // Trigger initial check
+                $(window).trigger('scroll');
+            });
+        }
+
+        // Init on page load
+        initFloatingScrollbar();
+
+        // Re-init after AJAX loads (for dynamic tables like monitoring)
+        var observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.addedNodes.length > 0) {
+                    initFloatingScrollbar();
+                }
+            });
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+    });
+    </script>
 </body>
 </html>
