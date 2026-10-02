@@ -264,6 +264,20 @@
                                 <textarea name="catatan" class="form-control" rows="4" placeholder="Contoh: gantikan tk(1hr), pinj 1x(2jt), dll.">{{ $detail->catatan }}</textarea>
                             </div>
 
+                            <div class="card bg-azure-lt border-azure mt-3">
+                                <div class="card-body p-3">
+                                    <label class="form-check form-switch mb-0 cursor-pointer">
+                                        <input class="form-check-input" type="checkbox" name="simpan_ke_master" value="1" checked>
+                                        <span class="form-check-label fw-bold text-azure">
+                                            Sinkronkan juga ke Master Gaji Karyawan
+                                        </span>
+                                        <span class="form-check-description text-muted small">
+                                            Jika dicentang, komponen gaji pokok, tunjangan, potongan, dan keterangan yang Anda simpan di sini akan otomatis diupdate ke Master Gaji sehingga tidak perlu mengulang input di bulan berikutnya.
+                                        </span>
+                                    </label>
+                                </div>
+                            </div>
+
                             <div class="alert alert-warning mt-4">
                                 <strong>Pemberitahuan:</strong>
                                 Mengubah nominal di form ini akan secara otomatis memperbarui kalkulasi Total Penghasilan, Total Potongan, Gaji Bersih (THP), dan meregenerasi dokumen PDF resmi slip gaji.

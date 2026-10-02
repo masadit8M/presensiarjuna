@@ -646,6 +646,53 @@ class GajiController extends Controller
             'updated_at' => now(),
         ]);
 
+        // If requested, synchronize changes back to gaji_master for future periods
+        if ($request->simpan_ke_master) {
+            $currentSlip = DB::table('penggajian_detail')->where('id', $id)->first();
+            if ($currentSlip) {
+                $karyawan = DB::table('karyawan')->where('nik', $currentSlip->nik)->first();
+                $allNiks = [$currentSlip->nik];
+                if ($karyawan && !empty($karyawan->nama_lengkap)) {
+                    $allNiks = DB::table('karyawan')
+                        ->whereRaw('TRIM(UPPER(nama_lengkap)) = ?', [trim(strtoupper($karyawan->nama_lengkap))])
+                        ->pluck('nik')
+                        ->toArray();
+                }
+
+                $gajiHarian = round(($gapok + $tunjTransport) / 26, 2);
+                foreach ($allNiks as $targetNik) {
+                    $existsMaster = DB::table('gaji_master')->where('nik', $targetNik)->first();
+                    $masterData = [
+                        'gaji_pokok' => $gapok,
+                        'tunjangan_transportasi' => $tunjTransport,
+                        'gaji_harian' => $gajiHarian,
+                        'tunjangan_jabatan' => $tunjJabatan,
+                        'ket_tunjangan_jabatan' => $request->ket_tunjangan_jabatan,
+                        'tunjangan_konsumsi' => $tunjKonsumsi,
+                        'ket_tunjangan_konsumsi' => $request->ket_tunjangan_konsumsi,
+                        'tarif_honor_kegiatan' => $honorKegiatan,
+                        'ket_honor_kegiatan' => $request->ket_honor_kegiatan,
+                        'tarif_ekskul' => $honorEkskul,
+                        'ket_honor_ekskul' => $request->ket_honor_ekskul,
+                        'tarif_lembur' => $upahLembur,
+                        'ket_tarif_lembur' => $request->ket_upah_lembur,
+                        'potongan_kasbon' => $potKasbon,
+                        'ket_potongan_kasbon' => $request->ket_potongan_kasbon,
+                        'potongan_lainnya' => $potLain,
+                        'ket_potongan_lainnya' => $request->ket_potongan_lainnya,
+                        'updated_at' => now(),
+                    ];
+                    if ($existsMaster) {
+                        DB::table('gaji_master')->where('nik', $targetNik)->update($masterData);
+                    } else {
+                        $masterData['nik'] = $targetNik;
+                        $masterData['created_at'] = now();
+                        DB::table('gaji_master')->insert($masterData);
+                    }
+                }
+            }
+        }
+
         // Re-generate PDF if it exists
         $detail = DB::table('penggajian_detail')
             ->join('karyawan', 'penggajian_detail.nik', '=', 'karyawan.nik')
@@ -660,7 +707,8 @@ class GajiController extends Controller
             DB::table('penggajian_detail')->where('id', $id)->update(['pdf_path' => $pdfRelPath]);
         }
 
-        return redirect('/gaji/periode/' . $detail->periode_id)->with(['success' => 'Slip gaji ' . $detail->nama_lengkap . ' berhasil diperbarui!']);
+        $extraInfo = $request->simpan_ke_master ? ' dan disimpan ke Master Gaji untuk bulan berikutnya!' : '!';
+        return redirect('/gaji/periode/' . $detail->periode_id)->with(['success' => 'Slip gaji ' . $detail->nama_lengkap . ' berhasil diperbarui' . $extraInfo]);
     }
 
     /**
@@ -1103,7 +1151,7 @@ class GajiController extends Controller
                         'created_at' => now(),
                         'updated_at' => now(),
                     ]);
-                } elseif ($force || $master->gaji_pokok <= 0 || $master->gaji_pokok == 1200000) {
+                } elseif ($force) {
                     DB::table('gaji_master')->where('nik', $k->nik)->update([
                         'gaji_pokok' => $matched['gaji_pokok'],
                         'tunjangan_transportasi' => $matched['tunjangan_transportasi'],
@@ -1364,7 +1412,202 @@ class GajiController extends Controller
             }
         }
 
+        // AUTOMATICALLY PROPAGATE TO ACTIVE / DRAFT PAYROLL PERIODS IN DATA GAJI!
+        $activePeriods = DB::table('penggajian_periode')
+            ->where('status', 'draft')
+            ->get();
+
+        if ($activePeriods->isEmpty()) {
+            $latestPeriod = DB::table('penggajian_periode')->orderBy('id', 'desc')->first();
+            if ($latestPeriod && $latestPeriod->status != 'terbayar') {
+                $activePeriods = collect([$latestPeriod]);
+            }
+        }
+
+        $syncedSlips = 0;
+        foreach ($activePeriods as $periode) {
+            $details = DB::table('penggajian_detail')
+                ->where('periode_id', $periode->id)
+                ->whereIn('nik', $allNiks)
+                ->get();
+
+            foreach ($details as $d) {
+                $hkStandar = $d->hk_standar > 0 ? $d->hk_standar : ($periode->hk_standar ?? 26);
+                $gajiBasisHarian = $gapok + $tunjTransport;
+                $gajiHarianCalc = $hkStandar > 0 ? ($gajiBasisHarian / $hkStandar) : 0;
+                $gajiPerJam = $gajiHarianCalc > 0 ? ($gajiHarianCalc / 10) : 0;
+
+                $potonganAbsen = round(($d->izin + $d->alpha) * $gajiHarianCalc, 0);
+                $potonganTerlambat = round($d->terlambat_jam * $gajiPerJam, 0);
+                $potonganBpjs = $bpjsKesehatan;
+
+                $totalPenghasilan = $gapok + $tunjTransport + $tunjJabatan + $tunjKonsumsi 
+                    + ($d->tunjangan_kehadiran ?? 0) 
+                    + $honorKegiatan + $honorEkskul + $upahLembur 
+                    + ($d->insentif_pool_tpa ?? 0) + ($d->reward_disiplin ?? 0) 
+                    + ($d->bonus_tambahan ?? 0) + ($d->tunjangan_lainnya ?? 0);
+
+                $totalPotongan = $potonganAbsen + $potonganTerlambat + $potonganKasbon + $potonganBpjs + $potonganLainnya;
+                $gajiBersih = max(0, $totalPenghasilan - $totalPotongan);
+
+                DB::table('penggajian_detail')->where('id', $d->id)->update([
+                    'gaji_pokok' => $gapok,
+                    'tunjangan_transportasi' => $tunjTransport,
+                    'tunjangan_jabatan' => $tunjJabatan,
+                    'ket_tunjangan_jabatan' => $ketTunjJabatan,
+                    'tunjangan_konsumsi' => $tunjKonsumsi,
+                    'ket_tunjangan_konsumsi' => $ketTunjKonsumsi,
+                    'honor_kegiatan' => $honorKegiatan,
+                    'ket_honor_kegiatan' => $ketHonorKegiatan,
+                    'honor_ekskul' => $honorEkskul,
+                    'ket_honor_ekskul' => $ketHonorEkskul,
+                    'upah_lembur' => $upahLembur,
+                    'ket_upah_lembur' => $ketTarifLembur,
+                    'potongan_kasbon' => $potonganKasbon,
+                    'ket_potongan_kasbon' => $ketPotonganKasbon,
+                    'potongan_bpjs' => $potonganBpjs,
+                    'potongan_lainnya' => $potonganLainnya,
+                    'ket_potongan_lainnya' => $ketPotonganLainnya,
+                    'potongan_absen' => $potonganAbsen,
+                    'potongan_terlambat' => $potonganTerlambat,
+                    'total_penghasilan' => $totalPenghasilan,
+                    'total_potongan' => $totalPotongan,
+                    'gaji_bersih' => $gajiBersih,
+                    'updated_at' => now(),
+                ]);
+
+                // Update / re-generate PDF if it already exists
+                if (!empty($d->pdf_path)) {
+                    $freshDetail = DB::table('penggajian_detail')
+                        ->join('karyawan', 'penggajian_detail.nik', '=', 'karyawan.nik')
+                        ->join('penggajian_periode', 'penggajian_detail.periode_id', '=', 'penggajian_periode.id')
+                        ->leftJoin('cabang', 'penggajian_detail.kode_cabang', '=', 'cabang.kode_cabang')
+                        ->where('penggajian_detail.id', $d->id)
+                        ->select('penggajian_detail.*', 'karyawan.nama_lengkap', 'karyawan.no_hp', 'penggajian_periode.nama_periode', 'penggajian_periode.tgl_selesai', 'cabang.nama_cabang')
+                        ->first();
+                    if ($freshDetail) {
+                        $pdfRelPath = SlipPdfService::generatePdf($freshDetail);
+                        DB::table('penggajian_detail')->where('id', $d->id)->update(['pdf_path' => $pdfRelPath]);
+                    }
+                }
+
+                $syncedSlips++;
+            }
+        }
+
         $nama = $currentKaryawan ? $currentKaryawan->nama_lengkap : $nik;
-        return redirect()->back()->with(['success' => 'Master standar gaji & potongan untuk ' . $nama . ' berhasil diperbarui untuk seluruh cabang penugasan!']);
+        $syncMsg = $syncedSlips > 0 ? ' dan otomatis diterapkan ke ' . $syncedSlips . ' slip periode aktif di Data Gaji!' : '!';
+        return redirect()->back()->with(['success' => 'Master standar gaji & potongan untuk ' . $nama . ' berhasil disimpan' . $syncMsg]);
+    }
+
+    /**
+     * Synchronize all employee slips in a period with their Master Gaji settings.
+     */
+    public function syncPeriodeFromMaster($id)
+    {
+        $this->ensureTablesExist();
+
+        $periode = DB::table('penggajian_periode')->where('id', $id)->first();
+        if (!$periode) {
+            return redirect('/gaji')->with(['warning' => 'Periode tidak ditemukan']);
+        }
+
+        $details = DB::table('penggajian_detail')->where('periode_id', $id)->get();
+        $updatedCount = 0;
+
+        foreach ($details as $d) {
+            // Find employee and all their NIKs
+            $karyawan = DB::table('karyawan')->where('nik', $d->nik)->first();
+            $personNiks = [$d->nik];
+            if ($karyawan && !empty($karyawan->nama_lengkap)) {
+                $personNiks = DB::table('karyawan')
+                    ->whereRaw('TRIM(UPPER(nama_lengkap)) = ?', [trim(strtoupper($karyawan->nama_lengkap))])
+                    ->pluck('nik')
+                    ->toArray();
+            }
+
+            $master = DB::table('gaji_master')
+                ->whereIn('nik', $personNiks)
+                ->where('gaji_pokok', '>', 0)
+                ->first();
+
+            if (!$master) {
+                $master = DB::table('gaji_master')->whereIn('nik', $personNiks)->first();
+            }
+
+            if ($master) {
+                $gapok = $master->gaji_pokok;
+                $tunjTransport = $master->tunjangan_transportasi;
+                $tunjJabatan = $master->tunjangan_jabatan ?? 0;
+                $tunjKonsumsi = $master->tunjangan_konsumsi ?? 0;
+                $honorKegiatan = $master->tarif_honor_kegiatan ?? 0;
+                $honorEkskul = $master->tarif_ekskul ?? 0;
+                $upahLembur = $master->tarif_lembur ?? 0;
+                $potonganKasbon = $master->potongan_kasbon ?? 0;
+                $potonganBpjs = ($master->bpjs_kesehatan ?? 0) + ($master->bpjs_ketenagakerjaan ?? 0);
+                $potonganLainnya = $master->potongan_lainnya ?? 0;
+
+                $hkStandar = $d->hk_standar > 0 ? $d->hk_standar : ($periode->hk_standar ?? 26);
+                $gajiBasisHarian = $gapok + $tunjTransport;
+                $gajiHarianCalc = $hkStandar > 0 ? ($gajiBasisHarian / $hkStandar) : 0;
+                $gajiPerJam = $gajiHarianCalc > 0 ? ($gajiHarianCalc / 10) : 0;
+
+                $potonganAbsen = round(($d->izin + $d->alpha) * $gajiHarianCalc, 0);
+                $potonganTerlambat = round($d->terlambat_jam * $gajiPerJam, 0);
+
+                $totalPenghasilan = $gapok + $tunjTransport + $tunjJabatan + $tunjKonsumsi 
+                    + ($d->tunjangan_kehadiran ?? 0) 
+                    + $honorKegiatan + $honorEkskul + $upahLembur 
+                    + ($d->insentif_pool_tpa ?? 0) + ($d->reward_disiplin ?? 0) 
+                    + ($d->bonus_tambahan ?? 0) + ($d->tunjangan_lainnya ?? 0);
+
+                $totalPotongan = $potonganAbsen + $potonganTerlambat + $potonganKasbon + $potonganBpjs + $potonganLainnya;
+                $gajiBersih = max(0, $totalPenghasilan - $totalPotongan);
+
+                DB::table('penggajian_detail')->where('id', $d->id)->update([
+                    'gaji_pokok' => $gapok,
+                    'tunjangan_transportasi' => $tunjTransport,
+                    'tunjangan_jabatan' => $tunjJabatan,
+                    'ket_tunjangan_jabatan' => $master->ket_tunjangan_jabatan,
+                    'tunjangan_konsumsi' => $tunjKonsumsi,
+                    'ket_tunjangan_konsumsi' => $master->ket_tunjangan_konsumsi,
+                    'honor_kegiatan' => $honorKegiatan,
+                    'ket_honor_kegiatan' => $master->ket_honor_kegiatan,
+                    'honor_ekskul' => $honorEkskul,
+                    'ket_honor_ekskul' => $master->ket_honor_ekskul,
+                    'upah_lembur' => $upahLembur,
+                    'ket_upah_lembur' => $master->ket_tarif_lembur,
+                    'potongan_kasbon' => $potonganKasbon,
+                    'ket_potongan_kasbon' => $master->ket_potongan_kasbon,
+                    'potongan_bpjs' => $potonganBpjs,
+                    'potongan_lainnya' => $potonganLainnya,
+                    'ket_potongan_lainnya' => $master->ket_potongan_lainnya,
+                    'potongan_absen' => $potonganAbsen,
+                    'potongan_terlambat' => $potonganTerlambat,
+                    'total_penghasilan' => $totalPenghasilan,
+                    'total_potongan' => $totalPotongan,
+                    'gaji_bersih' => $gajiBersih,
+                    'updated_at' => now(),
+                ]);
+
+                if (!empty($d->pdf_path)) {
+                    $freshDetail = DB::table('penggajian_detail')
+                        ->join('karyawan', 'penggajian_detail.nik', '=', 'karyawan.nik')
+                        ->join('penggajian_periode', 'penggajian_detail.periode_id', '=', 'penggajian_periode.id')
+                        ->leftJoin('cabang', 'penggajian_detail.kode_cabang', '=', 'cabang.kode_cabang')
+                        ->where('penggajian_detail.id', $d->id)
+                        ->select('penggajian_detail.*', 'karyawan.nama_lengkap', 'karyawan.no_hp', 'penggajian_periode.nama_periode', 'penggajian_periode.tgl_selesai', 'cabang.nama_cabang')
+                        ->first();
+                    if ($freshDetail) {
+                        $pdfRelPath = SlipPdfService::generatePdf($freshDetail);
+                        DB::table('penggajian_detail')->where('id', $d->id)->update(['pdf_path' => $pdfRelPath]);
+                    }
+                }
+
+                $updatedCount++;
+            }
+        }
+
+        return redirect()->back()->with(['success' => 'Berhasil menyinkronkan standar gaji, tunjangan, dan potongan dari Master Gaji untuk ' . $updatedCount . ' slip karyawan! Presensi kehadiran tetap aman.']);
     }
 }
