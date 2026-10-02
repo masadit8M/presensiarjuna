@@ -36,6 +36,11 @@ use Spatie\Permission\Models\Role;
 
 
 
+// Public Access Slip Gaji (via WhatsApp link - no login required)
+Route::get('/slip-gaji/dokumen/{id}/{token}', [GajiController::class, 'viewPublicSlip']);
+Route::get('/slip-gaji/download/{id}/{token}', [GajiController::class, 'downloadPublicSlip']);
+Route::get('/uploads/slip/{filename}', [GajiController::class, 'serveSlipFile']);
+
 Route::middleware(['guest:karyawan'])->group(function () {
     Route::get('/', function () {
         return view('auth.login');

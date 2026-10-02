@@ -800,12 +800,13 @@ class GajiController extends Controller
             'waktu_kirim_wa' => now(),
         ]);
 
-        // Build absolute public PDF download URL
+        // Build absolute public PDF download URL via public route (never 404, no login required)
         $host = request()->getSchemeAndHttpHost();
         if (str_contains($host, 'localhost') && config('app.url') && !str_contains(config('app.url'), 'localhost')) {
             $host = rtrim(config('app.url'), '/');
         }
-        $publicPdfUrl = rtrim($host, '/') . '/' . ltrim($pdfRelPath, '/');
+        $token = substr(md5($detail->nik . $detail->id . 'arjuna_slip_token'), 0, 12);
+        $publicPdfUrl = rtrim($host, '/') . '/slip-gaji/dokumen/' . $detail->id . '/' . $token;
 
         // Prepare professional WhatsApp message text
         $msg = "Assalamu'alaikum Wr. Wb.\n";
@@ -817,7 +818,7 @@ class GajiController extends Controller
         $msg .= "------------------------------------\n";
         $msg .= "💵 *Gaji Bersih (THP):* Rp " . number_format($detail->gaji_bersih, 0, ',', '.') . "\n";
         $msg .= "------------------------------------\n";
-        $msg .= "📄 *Unduh Dokumen PDF Resmi:*\n";
+        $msg .= "📄 *Lihat / Unduh Dokumen PDF Resmi:*\n";
         $msg .= $publicPdfUrl . "\n\n";
         $msg .= "_Dibuat oleh: Kartika P. (Bendahara Yayasan)_\n";
         $msg .= "_PAUD Arjuna Cendekia_";
@@ -844,6 +845,134 @@ class GajiController extends Controller
         }
 
         return redirect()->away($waUrl);
+    }
+
+    /**
+     * Publicly view slip PDF document via secure WhatsApp link (no login required).
+     */
+    public function viewPublicSlip($id, $token)
+    {
+        $this->ensureTablesExist();
+
+        $detail = DB::table('penggajian_detail')
+            ->join('karyawan', 'penggajian_detail.nik', '=', 'karyawan.nik')
+            ->join('penggajian_periode', 'penggajian_detail.periode_id', '=', 'penggajian_periode.id')
+            ->leftJoin('cabang', 'penggajian_detail.kode_cabang', '=', 'cabang.kode_cabang')
+            ->where('penggajian_detail.id', $id)
+            ->select('penggajian_detail.*', 'karyawan.nama_lengkap', 'penggajian_periode.nama_periode', 'penggajian_periode.tgl_selesai', 'cabang.nama_cabang')
+            ->first();
+
+        if (!$detail) {
+            abort(404, 'Dokumen Slip Gaji tidak ditemukan.');
+        }
+
+        $expectedToken = substr(md5($detail->nik . $detail->id . 'arjuna_slip_token'), 0, 12);
+        if ($token !== $expectedToken) {
+            abort(403, 'Akses link slip gaji tidak valid.');
+        }
+
+        $filename = 'slip_' . $detail->id . '_' . $detail->nik . '.pdf';
+        $fullPath = public_path('uploads/slip/' . $filename);
+
+        if (!file_exists($fullPath)) {
+            $altPath = base_path('public/uploads/slip/' . $filename);
+            if (file_exists($altPath)) {
+                $fullPath = $altPath;
+            } else {
+                SlipPdfService::generatePdf($detail);
+            }
+        }
+
+        if (!file_exists($fullPath)) {
+            abort(404, 'Gagal memuat dokumen slip PDF.');
+        }
+
+        $cleanName = 'Slip_Gaji_' . preg_replace('/[^A-Za-z0-9]/', '_', $detail->nama_lengkap) . '_' . $detail->nik . '.pdf';
+
+        return response()->file($fullPath, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . $cleanName . '"',
+            'Cache-Control' => 'no-cache, private',
+        ]);
+    }
+
+    /**
+     * Publicly download slip PDF via WhatsApp link.
+     */
+    public function downloadPublicSlip($id, $token)
+    {
+        $this->ensureTablesExist();
+
+        $detail = DB::table('penggajian_detail')
+            ->join('karyawan', 'penggajian_detail.nik', '=', 'karyawan.nik')
+            ->join('penggajian_periode', 'penggajian_detail.periode_id', '=', 'penggajian_periode.id')
+            ->leftJoin('cabang', 'penggajian_detail.kode_cabang', '=', 'cabang.kode_cabang')
+            ->where('penggajian_detail.id', $id)
+            ->select('penggajian_detail.*', 'karyawan.nama_lengkap', 'penggajian_periode.nama_periode', 'penggajian_periode.tgl_selesai', 'cabang.nama_cabang')
+            ->first();
+
+        if (!$detail) {
+            abort(404, 'Dokumen Slip Gaji tidak ditemukan.');
+        }
+
+        $expectedToken = substr(md5($detail->nik . $detail->id . 'arjuna_slip_token'), 0, 12);
+        if ($token !== $expectedToken) {
+            abort(403, 'Akses link slip gaji tidak valid.');
+        }
+
+        $filename = 'slip_' . $detail->id . '_' . $detail->nik . '.pdf';
+        $fullPath = public_path('uploads/slip/' . $filename);
+
+        if (!file_exists($fullPath)) {
+            SlipPdfService::generatePdf($detail);
+        }
+
+        $cleanName = 'Slip_Gaji_' . preg_replace('/[^A-Za-z0-9]/', '_', $detail->nama_lengkap) . '_' . $detail->nik . '.pdf';
+
+        return response()->download($fullPath, $cleanName);
+    }
+
+    /**
+     * Fallback file server for /uploads/slip/{filename} links (handles legacy links).
+     */
+    public function serveSlipFile($filename)
+    {
+        $filename = basename($filename);
+        $fullPath = public_path('uploads/slip/' . $filename);
+
+        if (!file_exists($fullPath)) {
+            $altPath = base_path('public/uploads/slip/' . $filename);
+            if (file_exists($altPath)) {
+                $fullPath = $altPath;
+            }
+        }
+
+        // If file doesn't exist on disk, auto-generate by parsing ID from slip_{id}_{nik}.pdf
+        if (!file_exists($fullPath)) {
+            if (preg_match('/^slip_(\d+)_/i', $filename, $matches)) {
+                $id = $matches[1];
+                $detail = DB::table('penggajian_detail')
+                    ->join('karyawan', 'penggajian_detail.nik', '=', 'karyawan.nik')
+                    ->join('penggajian_periode', 'penggajian_detail.periode_id', '=', 'penggajian_periode.id')
+                    ->leftJoin('cabang', 'penggajian_detail.kode_cabang', '=', 'cabang.kode_cabang')
+                    ->where('penggajian_detail.id', $id)
+                    ->select('penggajian_detail.*', 'karyawan.nama_lengkap', 'penggajian_periode.nama_periode', 'penggajian_periode.tgl_selesai', 'cabang.nama_cabang')
+                    ->first();
+                if ($detail) {
+                    SlipPdfService::generatePdf($detail);
+                }
+            }
+        }
+
+        if (file_exists($fullPath)) {
+            return response()->file($fullPath, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="' . $filename . '"',
+                'Cache-Control' => 'no-cache, private',
+            ]);
+        }
+
+        abort(404, 'Dokumen Slip Gaji tidak ditemukan.');
     }
 
     /**
@@ -891,7 +1020,8 @@ class GajiController extends Controller
                     if (str_contains($host, 'localhost') && config('app.url') && !str_contains(config('app.url'), 'localhost')) {
                         $host = rtrim(config('app.url'), '/');
                     }
-                    $publicPdfUrl = rtrim($host, '/') . '/' . ltrim($pdfRelPath, '/');
+                    $token = substr(md5($detail->nik . $detail->id . 'arjuna_slip_token'), 0, 12);
+                    $publicPdfUrl = rtrim($host, '/') . '/slip-gaji/dokumen/' . $detail->id . '/' . $token;
 
                     $msg = "Assalamu'alaikum Wr. Wb.\n";
                     $msg .= "Yth. *" . strtoupper($detail->nama_lengkap) . "*,\n\n";
