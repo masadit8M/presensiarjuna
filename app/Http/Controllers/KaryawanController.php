@@ -22,6 +22,21 @@ class KaryawanController extends Controller
                 $table->string('role_jam_kerja')->nullable()->default('Normal');
             });
         }
+
+        try {
+            DB::table('karyawan')
+                ->where(function ($q) {
+                    $q->where('nama_lengkap', 'like', '%CINDY%')
+                      ->orWhere('nama_lengkap', 'like', '%MAGDALENA%')
+                      ->orWhere('nama_lengkap', 'like', '%MAHDALENA%')
+                      ->orWhere('nama_lengkap', 'like', '%TITIN%')
+                      ->orWhere('nama_lengkap', 'like', '%ROSHELLA%');
+                })
+                ->where('status_location', '!=', 0)
+                ->update(['status_location' => 0]);
+        } catch (\Throwable $e) {
+            // Silently ignore
+        }
         $kode_dept = Auth::guard('user')->user()->kode_dept;
         $kode_cabang = Auth::guard('user')->user()->kode_cabang;
         $user = User::find(Auth::guard('user')->user()->id);

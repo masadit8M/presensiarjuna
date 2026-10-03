@@ -62,6 +62,9 @@
         <p>{{ $hariini }}</p>
         <p id="jam"></p>
         <p>{{ $jamkerja->nama_jam_kerja }}</p>
+        @if(isset($isBypassRadius) && $isBypassRadius)
+            <p><span class="badge bg-success text-white" style="font-size: 11px; padding: 2px 6px;">Bebas Lokasi</span></p>
+        @endif
         <p>Mulai : {{ date('H:i', strtotime($jamkerja->awal_jam_masuk)) }}</p>
         <p>Masuk : {{ date('H:i', strtotime($jamkerja->jam_masuk)) }}</p>
         <p>Akhir : {{ date('H:i', strtotime($jamkerja->akhir_jam_masuk)) }}</p>

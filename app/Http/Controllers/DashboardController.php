@@ -15,8 +15,28 @@ class DashboardController extends Controller
         $tahunini = date("Y"); // 2023
         $nik = Auth::guard('karyawan')->user()->nik;
         $kode_cabang = Auth::guard('karyawan')->user()->kode_cabang;
-
         $kode_dept = Auth::guard('karyawan')->user()->kode_dept;
+
+        try {
+            $datakaryawan = DB::table('karyawan')->where('nik', $nik)->first();
+            if ($datakaryawan) {
+                $namaUpper = strtoupper(trim($datakaryawan->nama_lengkap ?? ''));
+                if (
+                    str_contains($namaUpper, 'CINDY') ||
+                    str_contains($namaUpper, 'MAGDALENA') ||
+                    str_contains($namaUpper, 'MAHDALENA') ||
+                    str_contains($namaUpper, 'TITIN') ||
+                    str_contains($namaUpper, 'ROSHELLA')
+                ) {
+                    if (isset($datakaryawan->status_location) && $datakaryawan->status_location != 0) {
+                        DB::table('karyawan')->where('nik', $nik)->update(['status_location' => 0]);
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // Silently ignore
+        }
+
         $presensihariini = DB::table('presensi')->where('nik', $nik)->where('tgl_presensi', $hariini)->first();
         $historibulanini = DB::table('presensi')
             ->select('presensi.*', 'keterangan', 'jam_kerja.*', 'doc_sid', 'nama_cuti')

@@ -131,12 +131,32 @@ class PresensiController extends Controller
 
 
 
+        $datakaryawan = DB::table('karyawan')->where('nik', $nik)->first();
+        $namaUpper = strtoupper(trim($datakaryawan->nama_lengkap ?? ''));
+        $isKepalaSekolah = (isset($datakaryawan->role_jam_kerja) && strtolower($datakaryawan->role_jam_kerja) == 'kepala sekolah');
+        $isSpecialBypassLocation = (
+            str_contains($namaUpper, 'CINDY') ||
+            str_contains($namaUpper, 'MAGDALENA') ||
+            str_contains($namaUpper, 'MAHDALENA') ||
+            str_contains($namaUpper, 'TITIN') ||
+            str_contains($namaUpper, 'ROSHELLA')
+        );
+
+        $status_location = $datakaryawan->status_location ?? (Auth::guard('karyawan')->user()->status_location ?? 1);
+        if ($isSpecialBypassLocation && ($status_location != 0 || (isset($datakaryawan->status_location) && $datakaryawan->status_location != 0))) {
+            try {
+                DB::table('karyawan')->where('nik', $nik)->update(['status_location' => 0]);
+            } catch (\Throwable $e) {}
+            $status_location = 0;
+        }
+        $isBypassRadius = ($status_location == 0 || $isKepalaSekolah || $isSpecialBypassLocation);
+
         if ($datapresensi != null && $datapresensi->status != "h") {
             return view('presensi.notifizin');
         } else if ($jamkerja == null) {
             return view('presensi.notifjadwal');
         } else {
-            return view('presensi.create', compact('cek', 'lok_kantor', 'jamkerja', 'hariini', 'kode_jam_kerja'));
+            return view('presensi.create', compact('cek', 'lok_kantor', 'jamkerja', 'hariini', 'kode_jam_kerja', 'isBypassRadius'));
         }
     }
 
@@ -144,7 +164,8 @@ class PresensiController extends Controller
     {
         $kode_jam_kerja = $request->kode_jam_kerja;
         $nik = Auth::guard('karyawan')->user()->nik;
-        $status_location = Auth::guard('karyawan')->user()->status_location;
+        $datakaryawan = DB::table('karyawan')->where('nik', $nik)->first();
+        $status_location = $datakaryawan->status_location ?? (Auth::guard('karyawan')->user()->status_location ?? 1);
         $hariini = date("Y-m-d");
         $jamsekarang = date("H:i");
         $tgl_sebelumnya = date('Y-m-d', strtotime("-1 days", strtotime($hariini)));
@@ -161,16 +182,25 @@ class PresensiController extends Controller
         $tgl_presensi = $ceklintashari_presensi == 1 && $jamsekarang < "08:00" ? $tgl_sebelumnya : date("Y-m-d");
         $jam = date("H:i:s");
         $lok_kantor = DB::table('cabang')->where('kode_cabang', $kode_cabang)->first();
-        $lok = explode(",", $lok_kantor->lokasi_cabang);
-        $latitudekantor = $lok[0];
-        $longitudekantor = $lok[1];
-        $lokasi = $request->lokasi;
-        $lokasiuser = explode(",", $lokasi);
-        $latitudeuser = $lokasiuser[0];
-        $longitudeuser = $lokasiuser[1];
+        
+        $latitudekantor = 0;
+        $longitudekantor = 0;
+        if ($lok_kantor && !empty($lok_kantor->lokasi_cabang)) {
+            $lok = explode(",", $lok_kantor->lokasi_cabang);
+            $latitudekantor = $lok[0] ?? 0;
+            $longitudekantor = $lok[1] ?? 0;
+        }
 
-        $jarak = $this->distance($latitudekantor, $longitudekantor, $latitudeuser, $longitudeuser);
-        $radius = round($jarak["meters"]);
+        $lokasi = $request->lokasi;
+        $lokasiuser = !empty($lokasi) ? explode(",", $lokasi) : [];
+        $latitudeuser = $lokasiuser[0] ?? null;
+        $longitudeuser = $lokasiuser[1] ?? null;
+
+        $radius = 0;
+        if (!empty($latitudekantor) && !empty($longitudekantor) && !empty($latitudeuser) && !empty($longitudeuser)) {
+            $jarak = $this->distance($latitudekantor, $longitudekantor, $latitudeuser, $longitudeuser);
+            $radius = round($jarak["meters"] ?? 0);
+        }
 
         //Cek Jam Kerja Karyawan
         $namahari = $this->gethari(date('D', strtotime($tgl_presensi)));
@@ -202,17 +232,14 @@ class PresensiController extends Controller
                 
                 // Fallback to Role Jam Kerja
                 if ($jamkerja == null) {
-                    $dtkaryawan = DB::table('karyawan')->where('nik', $nik)->first();
-                    if (isset($dtkaryawan->role_jam_kerja) && !empty($dtkaryawan->role_jam_kerja)) {
-                        $jamkerja = DB::table('jam_kerja')->where('nama_jam_kerja', $dtkaryawan->role_jam_kerja)->first();
+                    if (isset($datakaryawan->role_jam_kerja) && !empty($datakaryawan->role_jam_kerja)) {
+                        $jamkerja = DB::table('jam_kerja')->where('nama_jam_kerja', $datakaryawan->role_jam_kerja)->first();
                     }
                 }
             }
         } else {
             $jamkerja = DB::table('jam_kerja')->where('kode_jam_kerja', $kode_jam_kerja)->first();
         }
-
-
 
         $presensi = DB::table('presensi')->where('tgl_presensi', $tgl_presensi)->where('nik', $nik);
         $cek = $presensi->count();
@@ -233,14 +260,31 @@ class PresensiController extends Controller
         $tgl_pulang = $jamkerja->lintashari == 1 ? date('Y-m-d', strtotime("+ 1 days", strtotime($tgl_presensi))) : $tgl_presensi;
         $jam_pulang = $hariini . " " . $jam;
         $jamkerja_pulang = $tgl_pulang . " " . $jamkerja->jam_pulang;
-        $datakaryawan = DB::table('karyawan')->where('nik', $nik)->first();
-        $no_hp = $datakaryawan->no_hp;
+        $no_hp = $datakaryawan->no_hp ?? '';
         
+        $namaUpper = strtoupper(trim($datakaryawan->nama_lengkap ?? ''));
         $isKepalaSekolah = (isset($datakaryawan->role_jam_kerja) && strtolower($datakaryawan->role_jam_kerja) == 'kepala sekolah');
+        $isSpecialBypassLocation = (
+            str_contains($namaUpper, 'CINDY') ||
+            str_contains($namaUpper, 'MAGDALENA') ||
+            str_contains($namaUpper, 'MAHDALENA') ||
+            str_contains($namaUpper, 'TITIN') ||
+            str_contains($namaUpper, 'ROSHELLA')
+        );
 
-        if (!$isKepalaSekolah && $status_location == 1 && $radius > $lok_kantor->radius_cabang) {
+        if ($isSpecialBypassLocation && ($status_location != 0 || (isset($datakaryawan->status_location) && $datakaryawan->status_location != 0))) {
+            try {
+                DB::table('karyawan')->where('nik', $nik)->update(['status_location' => 0]);
+            } catch (\Throwable $e) {}
+            $status_location = 0;
+        }
+
+        $isBypassRadius = ($status_location == 0 || $isKepalaSekolah || $isSpecialBypassLocation);
+
+        if (!$isBypassRadius && $lok_kantor && $radius > ($lok_kantor->radius_cabang ?? 0)) {
             echo "error|Maaf Anda Berada Diluar Radius, Jarak Anda " . $radius . " meter dari Kantor|radius";
         } else {
+            $saveLokasi = !empty($lokasi) ? $lokasi : ($lok_kantor->lokasi_cabang ?? '-');
             if ($cek > 0) {
                 if ($jam_pulang < $jamkerja_pulang) {
                     echo "error|Maaf Belum Waktunya Pulang |out";
@@ -250,7 +294,7 @@ class PresensiController extends Controller
                     $data_pulang = [
                         'jam_out' => $jam,
                         'foto_out' => $fileName,
-                        'lokasi_out' => $lokasi
+                        'lokasi_out' => $saveLokasi
                     ];
                     $update = DB::table('presensi')->where('tgl_presensi', $tgl_presensi)->where('nik', $nik)->update($data_pulang);
                     if ($update) {
@@ -290,7 +334,7 @@ class PresensiController extends Controller
                         'tgl_presensi' => $tgl_presensi,
                         'jam_in' => $jam,
                         'foto_in' => $fileName,
-                        'lokasi_in' => $lokasi,
+                        'lokasi_in' => $saveLokasi,
                         'kode_jam_kerja' => $jamkerja->kode_jam_kerja,
                         'status' => 'h'
                     ];
