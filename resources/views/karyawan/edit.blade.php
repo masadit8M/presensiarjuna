@@ -121,6 +121,139 @@
             </select>
         </div>
     </div>
+
+    <!-- PENGATURAN MASTER GAJI KARYAWAN -->
+    <div class="card border-primary mt-3 mb-2 shadow-sm">
+        <div class="card-header bg-primary-lt py-2">
+            <div>
+                <strong class="text-primary"><svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-cash me-1" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 9m0 2a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2z"/><path d="M14 14m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M17 9v-2a2 2 0 0 0 -2 -2h-10a2 2 0 0 0 -2 2v6a2 2 0 0 0 2 2h2"/></svg>Pengaturan Master Gaji (Tersinkron Otomatis)</strong>
+                <div class="small text-muted">Data ini tersinkron dengan Master Gaji & Periode Penggajian aktif.</div>
+            </div>
+        </div>
+        <div class="card-body py-2">
+            <div class="row g-2 mb-2">
+                <div class="col-md-6">
+                    <label class="form-label small mb-1 fw-bold">Gaji Pokok</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text">Rp</span>
+                        <input type="number" name="gaji_pokok" id="edit_gapok" class="form-control" value="{{ round($gajiMaster->gaji_pokok ?? 1200000) }}" oninput="hitungHarianEdit()">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small mb-1 fw-bold">Tunjangan Transportasi</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text">Rp</span>
+                        <input type="number" name="tunjangan_transportasi" id="edit_transp" class="form-control" value="{{ round($gajiMaster->tunjangan_transportasi ?? 150000) }}" oninput="hitungHarianEdit()">
+                    </div>
+                </div>
+            </div>
+
+            @php
+                $curGapok = $gajiMaster->gaji_pokok ?? 1200000;
+                $curTransp = $gajiMaster->tunjangan_transportasi ?? 150000;
+                $curHarian = round(($curGapok + $curTransp) / 26);
+            @endphp
+            <div class="alert alert-info py-2 px-3 mb-2">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="small">Gaji Harian Standar (26 HK):</span>
+                    <strong class="text-primary" id="labelHarianEdit">Rp {{ number_format($curHarian, 0, ',', '.') }} <span class="fw-normal small text-muted">/hari</span></strong>
+                </div>
+            </div>
+
+            <div class="row g-2 mb-2">
+                <div class="col-md-6">
+                    <label class="form-label small mb-1">Tunjangan Jabatan / Uang Ekstra</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text">Rp</span>
+                        <input type="number" name="tunjangan_jabatan" class="form-control" value="{{ round($gajiMaster->tunjangan_jabatan ?? 0) }}">
+                    </div>
+                    <input type="text" name="ket_tunjangan_jabatan" class="form-control form-control-sm mt-1" placeholder="Ket: (cth: Kepala Sekolah, Wali Kelas)" value="{{ $gajiMaster->ket_tunjangan_jabatan ?? '' }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small mb-1">Tunjangan Konsumsi</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text">Rp</span>
+                        <input type="number" name="tunjangan_konsumsi" class="form-control" value="{{ round($gajiMaster->tunjangan_konsumsi ?? 0) }}">
+                    </div>
+                    <input type="text" name="ket_tunjangan_konsumsi" class="form-control form-control-sm mt-1" placeholder="Ket: (cth: Uang Makan Piket)" value="{{ $gajiMaster->ket_tunjangan_konsumsi ?? '' }}">
+                </div>
+            </div>
+
+            <div class="row g-2 mb-2">
+                <div class="col-md-6">
+                    <label class="form-label small mb-1">Honor Kegiatan (Guru)</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text">Rp</span>
+                        <input type="number" name="tarif_honor_kegiatan" class="form-control" value="{{ round($gajiMaster->tarif_honor_kegiatan ?? 0) }}">
+                    </div>
+                    <input type="text" name="ket_honor_kegiatan" class="form-control form-control-sm mt-1" placeholder="Ket: (cth: Panitia Parenting)" value="{{ $gajiMaster->ket_honor_kegiatan ?? '' }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small mb-1">Honor Ekskul (Guru)</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text">Rp</span>
+                        <input type="number" name="tarif_ekskul" class="form-control" value="{{ round($gajiMaster->tarif_ekskul ?? 0) }}">
+                    </div>
+                    <input type="text" name="ket_honor_ekskul" class="form-control form-control-sm mt-1" placeholder="Ket: (cth: Pembina Tari)" value="{{ $gajiMaster->ket_honor_ekskul ?? '' }}">
+                </div>
+            </div>
+
+            <div class="row g-2 mb-2">
+                <div class="col-md-6">
+                    <label class="form-label small mb-1">Tarif Lembur (TPA)</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text">Rp</span>
+                        <input type="number" name="tarif_lembur" class="form-control" value="{{ round($gajiMaster->tarif_lembur ?? 0) }}">
+                    </div>
+                    <input type="text" name="ket_tarif_lembur" class="form-control form-control-sm mt-1" placeholder="Ket: (cth: Lembur Sore)" value="{{ $gajiMaster->ket_tarif_lembur ?? '' }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small mb-1">Potongan BPJS</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text">Rp</span>
+                        <input type="number" name="bpjs_kesehatan" class="form-control" value="{{ round($gajiMaster->bpjs_kesehatan ?? 0) }}">
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-2 mb-2">
+                <div class="col-md-6">
+                    <label class="form-label small mb-1 text-danger">Potongan Kasbon / Pinjaman Rutin</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text">Rp</span>
+                        <input type="number" name="potongan_kasbon" class="form-control" value="{{ round($gajiMaster->potongan_kasbon ?? 0) }}">
+                    </div>
+                    <input type="text" name="ket_potongan_kasbon" class="form-control form-control-sm mt-1" placeholder="Ket: (cth: Pinjaman Koperasi)" value="{{ $gajiMaster->ket_potongan_kasbon ?? '' }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small mb-1">Potongan Lainnya</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text">Rp</span>
+                        <input type="number" name="potongan_lainnya" class="form-control" value="{{ round($gajiMaster->potongan_lainnya ?? 0) }}">
+                    </div>
+                    <input type="text" name="ket_potongan_lainnya" class="form-control form-control-sm mt-1" placeholder="Ket potongan lainnya" value="{{ $gajiMaster->ket_potongan_lainnya ?? '' }}">
+                </div>
+            </div>
+
+            <div class="row g-2">
+                <div class="col-md-6">
+                    <label class="form-label small mb-1 text-success">Insentif Pagi ≤ 06:30 (TPA)</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text">Rp</span>
+                        <input type="number" name="insentif_pagi" class="form-control" value="{{ round($gajiMaster->insentif_pagi ?? 0) }}" placeholder="50000">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small mb-1 text-success">Pool SPP &gt;40 Siswa (TPA)</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text">Rp</span>
+                        <input type="number" name="hak_pool_spp" class="form-control" value="{{ round($gajiMaster->hak_pool_spp ?? 0) }}" placeholder="100000">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="row mt-2">
         <div class="col-12">
             <div class="form-group">
@@ -217,4 +350,11 @@
             return false;
         }
     });
+
+    function hitungHarianEdit() {
+        var gapok = parseFloat($('#edit_gapok').val()) || 0;
+        var transp = parseFloat($('#edit_transp').val()) || 0;
+        var harian = Math.round((gapok + transp) / 26);
+        $('#labelHarianEdit').html('Rp ' + harian.toLocaleString('id-ID') + ' <span class="fw-normal small text-muted">/hari</span>');
+    }
 </script>

@@ -1636,31 +1636,60 @@ class GajiController extends Controller
         // Auto sync if any master record is missing or zero
         $this->syncMasterFromExcelStandards(false);
 
-        // Auto-seed missing master records for all karyawan
-        $allExistingMasterNiks = DB::table('gaji_master')->pluck('nik')->toArray();
-        $missingKaryawan = DB::table('karyawan')->whereNotIn('nik', $allExistingMasterNiks)->get();
-        foreach ($missingKaryawan as $mk) {
-            $namaUpper = strtoupper($mk->nama_lengkap ?? '');
-            $matched = null;
-            foreach ($this->getExcelSalaryStandards() as $key => $vals) {
-                if (str_contains($namaUpper, $key)) {
-                    $matched = $vals;
-                    break;
+        // Auto-seed missing or zero master records for all karyawan
+        $zeroOrMissingNiks = DB::table('karyawan')
+            ->leftJoin('gaji_master', 'karyawan.nik', '=', 'gaji_master.nik')
+            ->where(function($q) {
+                $q->whereNull('gaji_master.id')
+                  ->orWhere('gaji_master.gaji_pokok', '<=', 0);
+            })
+            ->pluck('karyawan.nik')
+            ->toArray();
+
+        if (!empty($zeroOrMissingNiks)) {
+            $zeroKaryawan = DB::table('karyawan')->whereIn('nik', $zeroOrMissingNiks)->get();
+            foreach ($zeroKaryawan as $mk) {
+                $namaUpper = trim(strtoupper($mk->nama_lengkap ?? ''));
+
+                // First check if another NIK of the same person already has a configured master
+                $existingOther = DB::table('gaji_master')
+                    ->join('karyawan', 'gaji_master.nik', '=', 'karyawan.nik')
+                    ->whereRaw('TRIM(UPPER(karyawan.nama_lengkap)) = ?', [$namaUpper])
+                    ->where('gaji_master.gaji_pokok', '>', 0)
+                    ->select('gaji_master.*')
+                    ->first();
+
+                if ($existingOther) {
+                    $mRow = (array) $existingOther;
+                    unset($mRow['id']);
+                    $mRow['nik'] = $mk->nik;
+                    $mRow['updated_at'] = now();
+                    DB::table('gaji_master')->updateOrInsert(['nik' => $mk->nik], $mRow);
+                    continue;
                 }
+
+                $matched = null;
+                foreach ($this->getExcelSalaryStandards() as $key => $vals) {
+                    if (str_contains($namaUpper, $key)) {
+                        $matched = $vals;
+                        break;
+                    }
+                }
+                $gapok = $matched ? $matched['gaji_pokok'] : 1200000;
+                $transp = $matched ? $matched['tunjangan_transportasi'] : 150000;
+                $harian = round(($gapok + $transp) / 26, 2);
+                DB::table('gaji_master')->updateOrInsert(
+                    ['nik' => $mk->nik],
+                    [
+                        'gaji_pokok' => $gapok,
+                        'tunjangan_transportasi' => $transp,
+                        'gaji_harian' => $harian,
+                        'tunjangan_jabatan' => $matched['tunjangan_jabatan'] ?? 0,
+                        'potongan_kasbon' => $matched['potongan_kasbon'] ?? 0,
+                        'updated_at' => now(),
+                    ]
+                );
             }
-            $gapok = $matched ? $matched['gaji_pokok'] : 1200000;
-            $transp = $matched ? $matched['tunjangan_transportasi'] : 150000;
-            $harian = round(($gapok + $transp) / 26, 2);
-            DB::table('gaji_master')->insert([
-                'nik' => $mk->nik,
-                'gaji_pokok' => $gapok,
-                'tunjangan_transportasi' => $transp,
-                'gaji_harian' => $harian,
-                'tunjangan_jabatan' => $matched['tunjangan_jabatan'] ?? 0,
-                'potongan_kasbon' => $matched['potongan_kasbon'] ?? 0,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
         }
 
         $allKaryawan = DB::table('karyawan')

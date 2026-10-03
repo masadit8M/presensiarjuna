@@ -387,7 +387,7 @@
 
     </div>
     <div class="modal modal-blur fade" id="modal-inputkaryawan" tabindex="-1" role="dialog" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Tambah Data Karyawan</h5>
@@ -518,6 +518,134 @@
                                 </select>
                             </div>
                         </div>
+
+                        <!-- PENGATURAN MASTER GAJI KARYAWAN -->
+                        <div class="card border-primary mt-3 mb-2 shadow-sm">
+                            <div class="card-header bg-primary-lt py-2">
+                                <div>
+                                    <strong class="text-primary"><svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-cash me-1" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 9m0 2a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2z"/><path d="M14 14m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M17 9v-2a2 2 0 0 0 -2 -2h-10a2 2 0 0 0 -2 2v6a2 2 0 0 0 2 2h2"/></svg>Pengaturan Master Gaji (Tersinkron Otomatis)</strong>
+                                    <div class="small text-muted">Data gaji ini langsung tersimpan ke Master Gaji & Periode Penggajian aktif. Tidak perlu input ulang saat adjust gaji.</div>
+                                </div>
+                            </div>
+                            <div class="card-body py-2">
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-6">
+                                        <label class="form-label small mb-1 fw-bold">Gaji Pokok</label>
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text">Rp</span>
+                                            <input type="number" name="gaji_pokok" id="input_gapok" class="form-control" value="1200000" oninput="hitungHarianTambah()">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small mb-1 fw-bold">Tunjangan Transportasi</label>
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text">Rp</span>
+                                            <input type="number" name="tunjangan_transportasi" id="input_transp" class="form-control" value="150000" oninput="hitungHarianTambah()">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="alert alert-info py-2 px-3 mb-2">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="small">Gaji Harian Standar (26 HK):</span>
+                                        <strong class="text-primary" id="labelHarianTambah">Rp 51.923 <span class="fw-normal small text-muted">/hari</span></strong>
+                                    </div>
+                                </div>
+
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-6">
+                                        <label class="form-label small mb-1">Tunjangan Jabatan / Uang Ekstra</label>
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text">Rp</span>
+                                            <input type="number" name="tunjangan_jabatan" class="form-control" value="0">
+                                        </div>
+                                        <input type="text" name="ket_tunjangan_jabatan" class="form-control form-control-sm mt-1" placeholder="Ket: (cth: Kepala Sekolah, Wali Kelas)">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small mb-1">Tunjangan Konsumsi</label>
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text">Rp</span>
+                                            <input type="number" name="tunjangan_konsumsi" class="form-control" value="0">
+                                        </div>
+                                        <input type="text" name="ket_tunjangan_konsumsi" class="form-control form-control-sm mt-1" placeholder="Ket: (cth: Uang Makan Piket)">
+                                    </div>
+                                </div>
+
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-6">
+                                        <label class="form-label small mb-1">Honor Kegiatan (Guru)</label>
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text">Rp</span>
+                                            <input type="number" name="tarif_honor_kegiatan" class="form-control" value="0">
+                                        </div>
+                                        <input type="text" name="ket_honor_kegiatan" class="form-control form-control-sm mt-1" placeholder="Ket: (cth: Panitia Parenting)">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small mb-1">Honor Ekskul (Guru)</label>
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text">Rp</span>
+                                            <input type="number" name="tarif_ekskul" class="form-control" value="0">
+                                        </div>
+                                        <input type="text" name="ket_honor_ekskul" class="form-control form-control-sm mt-1" placeholder="Ket: (cth: Pembina Tari)">
+                                    </div>
+                                </div>
+
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-6">
+                                        <label class="form-label small mb-1">Tarif Lembur (TPA)</label>
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text">Rp</span>
+                                            <input type="number" name="tarif_lembur" class="form-control" value="0">
+                                        </div>
+                                        <input type="text" name="ket_tarif_lembur" class="form-control form-control-sm mt-1" placeholder="Ket: (cth: Lembur Sore)">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small mb-1">Potongan BPJS</label>
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text">Rp</span>
+                                            <input type="number" name="bpjs_kesehatan" class="form-control" value="0">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-6">
+                                        <label class="form-label small mb-1 text-danger">Potongan Kasbon / Pinjaman Rutin</label>
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text">Rp</span>
+                                            <input type="number" name="potongan_kasbon" class="form-control" value="0">
+                                        </div>
+                                        <input type="text" name="ket_potongan_kasbon" class="form-control form-control-sm mt-1" placeholder="Ket: (cth: Pinjaman Koperasi)">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small mb-1">Potongan Lainnya</label>
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text">Rp</span>
+                                            <input type="number" name="potongan_lainnya" class="form-control" value="0">
+                                        </div>
+                                        <input type="text" name="ket_potongan_lainnya" class="form-control form-control-sm mt-1" placeholder="Ket potongan lainnya">
+                                    </div>
+                                </div>
+
+                                <div class="row g-2">
+                                    <div class="col-md-6">
+                                        <label class="form-label small mb-1 text-success">Insentif Pagi ≤ 06:30 (TPA)</label>
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text">Rp</span>
+                                            <input type="number" name="insentif_pagi" class="form-control" value="0" placeholder="50000">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small mb-1 text-success">Pool SPP &gt;40 Siswa (TPA)</label>
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text">Rp</span>
+                                            <input type="number" name="hak_pool_spp" class="form-control" value="0" placeholder="100000">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="row mt-2">
                             <div class="col-12">
                                 <div class="form-group">
@@ -545,7 +673,7 @@
     </div>
     {{-- Modal Edit --}}
     <div class="modal modal-blur fade" id="modal-editkaryawan" tabindex="-1" role="dialog" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Edit Data Karyawan</h5>
@@ -685,5 +813,12 @@
                 }
             });
         });
+
+        function hitungHarianTambah() {
+            var gapok = parseFloat($('#input_gapok').val()) || 0;
+            var transp = parseFloat($('#input_transp').val()) || 0;
+            var harian = Math.round((gapok + transp) / 26);
+            $('#labelHarianTambah').html('Rp ' + harian.toLocaleString('id-ID') + ' <span class="fw-normal small text-muted">/hari</span>');
+        }
     </script>
 @endpush

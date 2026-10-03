@@ -103,12 +103,79 @@ class KaryawanController extends Controller
                     $request->file('foto')->storeAs($folderPath, $foto);
                 }
 
-                // Otomatis sinkronkan karyawan baru ke Data Penggajian & Master Gaji
+                // Simpan atau sinkronkan komponen Master Gaji Karyawan
+                $gapok = (float) str_replace(['.', ','], '', $request->gaji_pokok ?? 1200000);
+                $tunjTransport = (float) str_replace(['.', ','], '', $request->tunjangan_transportasi ?? 150000);
+                $tunjJabatan = (float) str_replace(['.', ','], '', $request->tunjangan_jabatan ?? 0);
+                $tunjKonsumsi = (float) str_replace(['.', ','], '', $request->tunjangan_konsumsi ?? 0);
+                $honorKegiatan = (float) str_replace(['.', ','], '', $request->tarif_honor_kegiatan ?? 0);
+                $honorEkskul = (float) str_replace(['.', ','], '', $request->tarif_ekskul ?? 0);
+                $tarifLembur = (float) str_replace(['.', ','], '', $request->tarif_lembur ?? 0);
+                $bpjsKesehatan = (float) str_replace(['.', ','], '', $request->bpjs_kesehatan ?? 0);
+                $potKasbon = (float) str_replace(['.', ','], '', $request->potongan_kasbon ?? 0);
+                $potLainnya = (float) str_replace(['.', ','], '', $request->potongan_lainnya ?? 0);
+                $insentifPagi = (float) str_replace(['.', ','], '', $request->insentif_pagi ?? 0);
+                $hakPoolSpp = (float) str_replace(['.', ','], '', $request->hak_pool_spp ?? 0);
+                $gajiHarian = round(($gapok + $tunjTransport) / 26, 2);
+
+                $masterData = [
+                    'nik' => $nik,
+                    'gaji_pokok' => $gapok,
+                    'tunjangan_transportasi' => $tunjTransport,
+                    'gaji_harian' => $gajiHarian,
+                    'tunjangan_jabatan' => $tunjJabatan,
+                    'ket_tunjangan_jabatan' => $request->ket_tunjangan_jabatan ?? null,
+                    'tunjangan_konsumsi' => $tunjKonsumsi,
+                    'ket_tunjangan_konsumsi' => $request->ket_tunjangan_konsumsi ?? null,
+                    'tarif_honor_kegiatan' => $honorKegiatan,
+                    'ket_honor_kegiatan' => $request->ket_honor_kegiatan ?? null,
+                    'tarif_ekskul' => $honorEkskul,
+                    'ket_honor_ekskul' => $request->ket_honor_ekskul ?? null,
+                    'tarif_lembur' => $tarifLembur,
+                    'ket_tarif_lembur' => $request->ket_tarif_lembur ?? null,
+                    'bpjs_kesehatan' => $bpjsKesehatan,
+                    'potongan_kasbon' => $potKasbon,
+                    'ket_potongan_kasbon' => $request->ket_potongan_kasbon ?? null,
+                    'potongan_lainnya' => $potLainnya,
+                    'ket_potongan_lainnya' => $request->ket_potongan_lainnya ?? null,
+                    'insentif_pagi' => $insentifPagi,
+                    'hak_pool_spp' => $hakPoolSpp,
+                    'updated_at' => now(),
+                ];
+
+                $existsMaster = DB::table('gaji_master')->where('nik', $nik)->first();
+                if ($existsMaster) {
+                    DB::table('gaji_master')->where('nik', $nik)->update($masterData);
+                } else {
+                    $masterData['created_at'] = now();
+                    DB::table('gaji_master')->insert($masterData);
+                }
+
+                // Sinkronkan ke seluruh NIK jika nama karyawan sama di cabang lain
+                $allNiks = DB::table('karyawan')
+                    ->whereRaw('TRIM(UPPER(nama_lengkap)) = ?', [trim(strtoupper($nama_lengkap))])
+                    ->pluck('nik')
+                    ->toArray();
+                foreach ($allNiks as $otherNik) {
+                    if ($otherNik != $nik) {
+                        $otherData = $masterData;
+                        $otherData['nik'] = $otherNik;
+                        $existsOther = DB::table('gaji_master')->where('nik', $otherNik)->first();
+                        if ($existsOther) {
+                            DB::table('gaji_master')->where('nik', $otherNik)->update($otherData);
+                        } else {
+                            $otherData['created_at'] = now();
+                            DB::table('gaji_master')->insert($otherData);
+                        }
+                    }
+                }
+
+                // Otomatis sinkronkan karyawan baru ke Data Penggajian aktif
                 try {
                     \App\Http\Controllers\GajiController::syncMissingEmployeesToActivePeriods();
                 } catch (\Throwable $ex) {}
 
-                return Redirect::back()->with(['success' => 'Data Berhasil Disimpan']);
+                return Redirect::back()->with(['success' => 'Data Karyawan & Master Gaji Berhasil Disimpan']);
             }
         } catch (\Exception $e) {
 
@@ -127,7 +194,16 @@ class KaryawanController extends Controller
         $departemen = DB::table('departemen')->get();
         $cabang = DB::table('cabang')->orderBy('kode_cabang')->get();
         $karyawan = DB::table('karyawan')->where('nik', $nik)->first();
-        return view('karyawan.edit', compact('departemen', 'karyawan', 'cabang'));
+        $gajiMaster = DB::table('gaji_master')->where('nik', $nik)->first();
+        if (!$gajiMaster && $karyawan && !empty($karyawan->nama_lengkap)) {
+            $gajiMaster = DB::table('gaji_master')
+                ->join('karyawan', 'gaji_master.nik', '=', 'karyawan.nik')
+                ->whereRaw('TRIM(UPPER(karyawan.nama_lengkap)) = ?', [trim(strtoupper($karyawan->nama_lengkap))])
+                ->where('gaji_master.gaji_pokok', '>', 0)
+                ->select('gaji_master.*')
+                ->first();
+        }
+        return view('karyawan.edit', compact('departemen', 'karyawan', 'cabang', 'gajiMaster'));
     }
 
     public function update($nik, Request $request)
@@ -177,12 +253,72 @@ class KaryawanController extends Controller
                     $request->file('foto')->storeAs($folderPath, $foto);
                 }
 
+                // Update / simpan pengaturan master gaji jika ada di form
+                if ($request->has('gaji_pokok')) {
+                    $gapok = (float) str_replace(['.', ','], '', $request->gaji_pokok ?? 0);
+                    $tunjTransport = (float) str_replace(['.', ','], '', $request->tunjangan_transportasi ?? 0);
+                    $tunjJabatan = (float) str_replace(['.', ','], '', $request->tunjangan_jabatan ?? 0);
+                    $tunjKonsumsi = (float) str_replace(['.', ','], '', $request->tunjangan_konsumsi ?? 0);
+                    $honorKegiatan = (float) str_replace(['.', ','], '', $request->tarif_honor_kegiatan ?? 0);
+                    $honorEkskul = (float) str_replace(['.', ','], '', $request->tarif_ekskul ?? 0);
+                    $tarifLembur = (float) str_replace(['.', ','], '', $request->tarif_lembur ?? 0);
+                    $bpjsKesehatan = (float) str_replace(['.', ','], '', $request->bpjs_kesehatan ?? 0);
+                    $potKasbon = (float) str_replace(['.', ','], '', $request->potongan_kasbon ?? 0);
+                    $potLainnya = (float) str_replace(['.', ','], '', $request->potongan_lainnya ?? 0);
+                    $insentifPagi = (float) str_replace(['.', ','], '', $request->insentif_pagi ?? 0);
+                    $hakPoolSpp = (float) str_replace(['.', ','], '', $request->hak_pool_spp ?? 0);
+                    $gajiHarian = round(($gapok + $tunjTransport) / 26, 2);
+
+                    $allNiks = DB::table('karyawan')
+                        ->whereRaw('TRIM(UPPER(nama_lengkap)) = ?', [trim(strtoupper($nama_lengkap))])
+                        ->pluck('nik')
+                        ->toArray();
+                    if (!in_array($nik_baru, $allNiks)) {
+                        $allNiks[] = $nik_baru;
+                    }
+
+                    foreach ($allNiks as $targetNik) {
+                        $masterData = [
+                            'gaji_pokok' => $gapok,
+                            'tunjangan_transportasi' => $tunjTransport,
+                            'gaji_harian' => $gajiHarian,
+                            'tunjangan_jabatan' => $tunjJabatan,
+                            'ket_tunjangan_jabatan' => $request->ket_tunjangan_jabatan ?? null,
+                            'tunjangan_konsumsi' => $tunjKonsumsi,
+                            'ket_tunjangan_konsumsi' => $request->ket_tunjangan_konsumsi ?? null,
+                            'tarif_honor_kegiatan' => $honorKegiatan,
+                            'ket_honor_kegiatan' => $request->ket_honor_kegiatan ?? null,
+                            'tarif_ekskul' => $honorEkskul,
+                            'ket_honor_ekskul' => $request->ket_honor_ekskul ?? null,
+                            'tarif_lembur' => $tarifLembur,
+                            'ket_tarif_lembur' => $request->ket_tarif_lembur ?? null,
+                            'bpjs_kesehatan' => $bpjsKesehatan,
+                            'potongan_kasbon' => $potKasbon,
+                            'ket_potongan_kasbon' => $request->ket_potongan_kasbon ?? null,
+                            'potongan_lainnya' => $potLainnya,
+                            'ket_potongan_lainnya' => $request->ket_potongan_lainnya ?? null,
+                            'insentif_pagi' => $insentifPagi,
+                            'hak_pool_spp' => $hakPoolSpp,
+                            'updated_at' => now(),
+                        ];
+
+                        $existsMaster = DB::table('gaji_master')->where('nik', $targetNik)->first();
+                        if ($existsMaster) {
+                            DB::table('gaji_master')->where('nik', $targetNik)->update($masterData);
+                        } else {
+                            $masterData['nik'] = $targetNik;
+                            $masterData['created_at'] = now();
+                            DB::table('gaji_master')->insert($masterData);
+                        }
+                    }
+                }
+
                 // Otomatis sinkronkan perubahan karyawan ke Data Penggajian aktif
                 try {
                     \App\Http\Controllers\GajiController::syncMissingEmployeesToActivePeriods();
                 } catch (\Throwable $ex) {}
 
-                return Redirect::back()->with(['success' => 'Data Berhasil Update']);
+                return Redirect::back()->with(['success' => 'Data Karyawan & Master Gaji Berhasil Diupdate']);
             }
         } catch (\Exception $e) {
             return Redirect::back()->with(['warning' => 'Data Gagal Diupdate']);
