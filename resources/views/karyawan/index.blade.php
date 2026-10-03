@@ -320,7 +320,9 @@
                                                                     </svg>
                                                                 </a>
                                                                 <a href="/karyawan/{{ Crypt::encrypt($d->nik) }}/resetpassword"
-                                                                    class="btn btn-sm btn-warning">
+                                                                    class="btn btn-sm btn-warning"
+                                                                    onclick="return confirm('Reset password untuk {{ $d->nama_lengkap }} ke default (12345)?')"
+                                                                    title="Reset Password ke default 12345">
                                                                     <svg xmlns="http://www.w3.org/2000/svg"
                                                                         class="icon icon-tabler icon-tabler-key-off"
                                                                         width="24" height="24" viewBox="0 0 24 24"
@@ -481,6 +483,17 @@
                                     </span>
                                     <input type="text" id="no_hp" value="" class="form-control"
                                         name="no_hp" placeholder="No. HP">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="input-icon mb-3">
+                                    <span class="input-icon-addon">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-key" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M16.555 3.843l3.602 3.602a2.877 2.877 0 0 1 0 4.069l-2.643 2.643a2.877 2.877 0 0 1 -4.069 0l-.301 -.301l-6.558 6.558a2 2 0 0 1 -1.414 .586h-2.172a1 1 0 0 1 -1 -1v-2.172a2 2 0 0 1 .586 -1.414l6.558 -6.558l-.301 -.301a2.877 2.877 0 0 1 0 -4.069l2.643 -2.643a2.877 2.877 0 0 1 4.069 0z"/></svg>
+                                    </span>
+                                    <input type="text" id="password" class="form-control"
+                                        name="password" placeholder="Password Login (Kosongkan jika default: 12345)">
                                 </div>
                             </div>
                         </div>

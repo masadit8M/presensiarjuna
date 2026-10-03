@@ -76,7 +76,7 @@ class KaryawanController extends Controller
         $role_jam_kerja = $request->role_jam_kerja;
         $no_hp = $request->no_hp;
         $kode_dept = $request->kode_dept;
-        $password = Hash::make('12345');
+        $password = !empty($request->password) ? Hash::make($request->password) : Hash::make('12345');
         $kode_cabang = $request->kode_cabang;
         if ($request->hasFile('foto')) {
             $foto = $nik . "." . $request->file('foto')->getClientOriginalExtension();
@@ -216,7 +216,6 @@ class KaryawanController extends Controller
         $no_hp = $request->no_hp;
         $kode_dept = $request->kode_dept;
         $kode_cabang = $request->kode_cabang;
-        $password = Hash::make('12345');
         $old_foto = $request->old_foto;
         if ($request->hasFile('foto')) {
             $foto = $nik . "." . $request->file('foto')->getClientOriginalExtension();
@@ -241,9 +240,11 @@ class KaryawanController extends Controller
                 'no_hp' => $no_hp,
                 'kode_dept' => $kode_dept,
                 'foto' => $foto,
-                'password' => $password,
                 'kode_cabang' => $kode_cabang
             ];
+            if (!empty($request->password)) {
+                $data['password'] = Hash::make($request->password);
+            }
             $update = DB::table('karyawan')->where('nik', $nik)->update($data);
             if ($update) {
                 if ($request->hasFile('foto')) {
@@ -338,13 +339,15 @@ class KaryawanController extends Controller
     public function resetpassword($nik)
     {
         $nik = Crypt::decrypt($nik);
+        $karyawan = DB::table('karyawan')->where('nik', $nik)->first();
         $password = Hash::make('12345');
         $reset = DB::table('karyawan')->where('nik', $nik)->update([
             'password' => $password
         ]);
 
         if ($reset) {
-            return Redirect::back()->with(['success' => 'Data Password Berhasil di Reset']);
+            $nama = $karyawan ? $karyawan->nama_lengkap : 'Karyawan';
+            return Redirect::back()->with(['success' => 'Password untuk ' . $nama . ' berhasil di-reset kembali ke default: 12345']);
         } else {
             return Redirect::back()->with(['warning' => 'Data Password Gagal di Reset']);
         }
