@@ -102,6 +102,12 @@ class KaryawanController extends Controller
                     $folderPath = "public/uploads/karyawan/";
                     $request->file('foto')->storeAs($folderPath, $foto);
                 }
+
+                // Otomatis sinkronkan karyawan baru ke Data Penggajian & Master Gaji
+                try {
+                    \App\Http\Controllers\GajiController::syncMissingEmployeesToActivePeriods();
+                } catch (\Throwable $ex) {}
+
                 return Redirect::back()->with(['success' => 'Data Berhasil Disimpan']);
             }
         } catch (\Exception $e) {
@@ -170,10 +176,15 @@ class KaryawanController extends Controller
                     Storage::delete($folderPathOld);
                     $request->file('foto')->storeAs($folderPath, $foto);
                 }
+
+                // Otomatis sinkronkan perubahan karyawan ke Data Penggajian aktif
+                try {
+                    \App\Http\Controllers\GajiController::syncMissingEmployeesToActivePeriods();
+                } catch (\Throwable $ex) {}
+
                 return Redirect::back()->with(['success' => 'Data Berhasil Update']);
             }
         } catch (\Exception $e) {
-            dd($e);
             return Redirect::back()->with(['warning' => 'Data Gagal Diupdate']);
         }
     }

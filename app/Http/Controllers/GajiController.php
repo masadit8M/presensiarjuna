@@ -184,6 +184,12 @@ class GajiController extends Controller
     {
         $this->ensureTablesExist();
 
+        try {
+            self::syncMissingEmployeesToActivePeriods();
+        } catch (\Throwable $e) {
+            // Silently ignore
+        }
+
         $query = DB::table('penggajian_periode')
             ->orderBy('tahun', 'desc')
             ->orderBy('bulan', 'desc');
@@ -509,6 +515,311 @@ class GajiController extends Controller
     }
 
     /**
+     * Automatically synchronize missing employees from Data Master Karyawan into a payroll period.
+     * Guarantees that any new employee added in Data Master immediately appears in Data Penggajian.
+     */
+    public static function syncMissingEmployeesToPeriod($periodeId)
+    {
+        $periode = DB::table('penggajian_periode')->where('id', $periodeId)->first();
+        if (!$periode || $periode->status == 'terbayar') {
+            return 0;
+        }
+
+        $hkStandar = $periode->hk_standar > 0 ? $periode->hk_standar : 26;
+        $tglMulai = $periode->tgl_mulai;
+        $tglSelesai = $periode->tgl_selesai;
+
+        // Existing employees already in this period (grouped by normalized name and NIKs)
+        $existingDetails = DB::table('penggajian_detail')
+            ->join('karyawan', 'penggajian_detail.nik', '=', 'karyawan.nik')
+            ->where('penggajian_detail.periode_id', $periodeId)
+            ->select('penggajian_detail.nik', 'karyawan.nama_lengkap')
+            ->get();
+
+        $existingNames = [];
+        $existingNiks = [];
+        foreach ($existingDetails as $ed) {
+            $norm = trim(strtoupper($ed->nama_lengkap ?? ''));
+            if (!empty($norm)) {
+                $existingNames[$norm] = true;
+            }
+            $existingNiks[$ed->nik] = true;
+        }
+
+        // All active karyawan in system
+        $allKaryawan = DB::table('karyawan')->orderBy('nama_lengkap', 'asc')->get();
+
+        // Group by normalized name
+        $groupedKaryawan = [];
+        foreach ($allKaryawan as $k) {
+            $normName = trim(strtoupper($k->nama_lengkap ?? ''));
+            if (empty($normName)) continue;
+
+            if (!isset($groupedKaryawan[$normName])) {
+                $groupedKaryawan[$normName] = [
+                    'primary' => $k,
+                    'all_niks' => [$k->nik],
+                    'all_cabang' => !empty($k->kode_cabang) ? [$k->kode_cabang] : [],
+                ];
+            } else {
+                $groupedKaryawan[$normName]['all_niks'][] = $k->nik;
+                if (!empty($k->kode_cabang) && !in_array($k->kode_cabang, $groupedKaryawan[$normName]['all_cabang'])) {
+                    $groupedKaryawan[$normName]['all_cabang'][] = $k->kode_cabang;
+                }
+            }
+        }
+
+        $totalAdded = 0;
+        $standards = (new self)->getExcelSalaryStandards();
+
+        foreach ($groupedKaryawan as $normName => $personData) {
+            if (isset($existingNames[$normName])) {
+                continue;
+            }
+            $personNiks = array_values(array_unique($personData['all_niks']));
+            $hasAnyNik = false;
+            foreach ($personNiks as $pNik) {
+                if (isset($existingNiks[$pNik])) {
+                    $hasAnyNik = true;
+                    break;
+                }
+            }
+            if ($hasAnyNik) {
+                continue;
+            }
+
+            $k = $personData['primary'];
+
+            // Master salary check / initialization
+            $master = DB::table('gaji_master')
+                ->whereIn('nik', $personNiks)
+                ->where('gaji_pokok', '>', 0)
+                ->first();
+
+            if (!$master) {
+                $master = DB::table('gaji_master')->whereIn('nik', $personNiks)->first();
+            }
+
+            if (!$master) {
+                $matched = null;
+                foreach ($standards as $key => $vals) {
+                    if (str_contains($normName, $key)) {
+                        $matched = $vals;
+                        break;
+                    }
+                }
+
+                $gapokDefault = $matched ? $matched['gaji_pokok'] : 1200000;
+                $transpDefault = $matched ? $matched['tunjangan_transportasi'] : 150000;
+                $jabatanDefault = $matched ? ($matched['tunjangan_jabatan'] ?? 0) : 0;
+                $kasbonDefault = $matched ? ($matched['potongan_kasbon'] ?? 0) : 0;
+                $harianDefault = round(($gapokDefault + $transpDefault) / 26, 2);
+
+                DB::table('gaji_master')->insert([
+                    'nik' => $k->nik,
+                    'gaji_pokok' => $gapokDefault,
+                    'tunjangan_transportasi' => $transpDefault,
+                    'tunjangan_jabatan' => $jabatanDefault,
+                    'potongan_kasbon' => $kasbonDefault,
+                    'gaji_harian' => $harianDefault,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                $master = DB::table('gaji_master')->where('nik', $k->nik)->first();
+            }
+
+            $gapok = $master ? $master->gaji_pokok : 1200000;
+            $tunjTransport = $master ? $master->tunjangan_transportasi : 150000;
+            $tunjJabatan = $master ? $master->tunjangan_jabatan : 0;
+            $tunjKonsumsi = $master ? $master->tunjangan_konsumsi : 0;
+            $tunjKehadiran = $master ? $master->tunjangan_kehadiran : 0;
+            $honorKegiatan = $master ? $master->tarif_honor_kegiatan : 0;
+            $honorEkskul = $master ? $master->tarif_ekskul : 0;
+            $upahLembur = $master ? $master->tarif_lembur : 0;
+
+            // Attendance check
+            $presensiData = DB::table('presensi')
+                ->whereIn('nik', $personNiks)
+                ->whereBetween('tgl_presensi', [$tglMulai, $tglSelesai])
+                ->get();
+
+            $hadirDates = [];
+            $izinDates = [];
+            $sakitDates = [];
+            $alphaDates = [];
+            $telatByDate = [];
+
+            foreach ($presensiData as $p) {
+                $tgl = $p->tgl_presensi;
+                if ($p->status == 'h' || !empty($p->jam_in)) {
+                    $hadirDates[$tgl] = true;
+                    $jamMasukJadwal = "07:00:00";
+                    if (!empty($p->kode_jam_kerja)) {
+                        $jk = DB::table('jam_kerja')->where('kode_jam_kerja', $p->kode_jam_kerja)->first();
+                        if ($jk && !empty($jk->jam_masuk)) {
+                            $jamMasukJadwal = $jk->jam_masuk;
+                        }
+                    }
+                    if (!empty($p->jam_in) && strtotime($p->jam_in) > strtotime($jamMasukJadwal)) {
+                        $diffSeconds = strtotime($p->jam_in) - strtotime($jamMasukJadwal);
+                        $telatByDate[$tgl] = round($diffSeconds / 3600, 2);
+                    } else {
+                        $telatByDate[$tgl] = 0;
+                    }
+                } elseif ($p->status == 'i') {
+                    $izinDates[$tgl] = true;
+                } elseif ($p->status == 's') {
+                    $sakitDates[$tgl] = true;
+                } elseif ($p->status == 'a') {
+                    $alphaDates[$tgl] = true;
+                }
+            }
+
+            $hadir = count($hadirDates);
+            foreach (array_keys($hadirDates) as $d) {
+                unset($izinDates[$d], $sakitDates[$d], $alphaDates[$d]);
+            }
+            $izin = count($izinDates);
+            foreach (array_keys($izinDates) as $d) {
+                unset($sakitDates[$d], $alphaDates[$d]);
+            }
+            $sakit = count($sakitDates);
+            foreach (array_keys($sakitDates) as $d) {
+                unset($alphaDates[$d]);
+            }
+            $alpha = count($alphaDates);
+            $totalJamTerlambat = array_sum($telatByDate);
+
+            // Calculate alpha if total presence records is less than HK and period has ended
+            $totalDicatat = $hadir + $izin + $sakit + $alpha;
+            if ($totalDicatat < $hkStandar) {
+                $selisih = $hkStandar - $totalDicatat;
+                if (strtotime($tglSelesai) <= time()) {
+                    $alpha += $selisih;
+                }
+            }
+
+            $potonganKasbon = $master ? ($master->potongan_kasbon ?? 0) : 0;
+            $potonganBpjs = $master ? (($master->bpjs_kesehatan ?? 0) + ($master->bpjs_ketenagakerjaan ?? 0)) : 0;
+            $potonganLainnya = $master ? ($master->potongan_lainnya ?? 0) : 0;
+
+            $gajiBasisHarian = ($gapok + $tunjTransport);
+            $gajiHarian = $hkStandar > 0 ? ($gajiBasisHarian / $hkStandar) : 0;
+            $gajiPerJam = $gajiHarian > 0 ? ($gajiHarian / 10) : 0;
+
+            $potonganAbsen = round(($izin + $alpha) * $gajiHarian, 0);
+            $potonganTerlambat = round($totalJamTerlambat * $gajiPerJam, 0);
+
+            $insentifPoolTpa = 0;
+            $rewardDisiplin = 0;
+
+            $isTpa = str_contains(strtoupper($k->jabatan ?? ''), 'TPA')
+                  || str_contains(strtoupper($k->kode_dept ?? ''), 'TPA')
+                  || str_contains(strtoupper($k->jabatan ?? ''), 'DAYCARE');
+
+            if ($isTpa) {
+                $plafonPoolSpp    = $master ? (float)($master->hak_pool_spp  ?? 100000) : 100000;
+                $plafonInsentifPagi = $master ? (float)($master->insentif_pagi ?? 50000)  : 50000;
+                $totalSiswaTpa = $periode->total_siswa_tpa ?? 0;
+                $insentifPoolTpa = ($totalSiswaTpa >= 41) ? $plafonPoolSpp : 0;
+                $adaTerlambat = count(array_filter($telatByDate, fn($t) => $t > 0)) > 0;
+                $rewardDisiplin = $adaTerlambat ? 0 : $plafonInsentifPagi;
+            }
+
+            $totalPenghasilan = $gapok + $tunjTransport + $tunjJabatan + $tunjKonsumsi + $tunjKehadiran + $honorKegiatan + $honorEkskul + $upahLembur + $insentifPoolTpa + $rewardDisiplin;
+            $totalPotongan = $potonganAbsen + $potonganTerlambat + $potonganKasbon + $potonganBpjs + $potonganLainnya;
+            $gajiBersih = max(0, $totalPenghasilan - $totalPotongan);
+
+            DB::table('penggajian_detail')->insert([
+                'periode_id' => $periodeId,
+                'nik' => $k->nik,
+                'kode_cabang' => $k->kode_cabang,
+                'kode_dept' => $k->kode_dept,
+                'jabatan' => $k->jabatan,
+                'hk_standar' => $hkStandar,
+                'hadir' => $hadir,
+                'izin' => $izin,
+                'sakit' => $sakit,
+                'alpha' => $alpha,
+                'terlambat_jam' => $totalJamTerlambat,
+                'gaji_pokok' => $gapok,
+                'tunjangan_transportasi' => $tunjTransport,
+                'tunjangan_jabatan' => $tunjJabatan,
+                'ket_tunjangan_jabatan' => $master->ket_tunjangan_jabatan ?? null,
+                'tunjangan_konsumsi' => $tunjKonsumsi,
+                'ket_tunjangan_konsumsi' => $master->ket_tunjangan_konsumsi ?? null,
+                'tunjangan_kehadiran' => $tunjKehadiran,
+                'tunjangan_lainnya' => 0,
+                'ket_tunjangan_lainnya' => null,
+                'honor_kegiatan' => $honorKegiatan,
+                'ket_honor_kegiatan' => $master->ket_honor_kegiatan ?? null,
+                'honor_ekskul' => $honorEkskul,
+                'ket_honor_ekskul' => $master->ket_honor_ekskul ?? null,
+                'upah_lembur' => $upahLembur,
+                'ket_upah_lembur' => $master->ket_tarif_lembur ?? null,
+                'insentif_pool_tpa' => $insentifPoolTpa,
+                'reward_disiplin' => $rewardDisiplin,
+                'bonus_tambahan' => 0,
+                'ket_bonus_tambahan' => null,
+                'potongan_absen' => $potonganAbsen,
+                'potongan_terlambat' => $potonganTerlambat,
+                'potongan_kasbon' => $potonganKasbon,
+                'ket_potongan_kasbon' => $master->ket_potongan_kasbon ?? null,
+                'potongan_bpjs' => $potonganBpjs,
+                'potongan_lainnya' => $potonganLainnya,
+                'ket_potongan_lainnya' => $master->ket_potongan_lainnya ?? null,
+                'total_penghasilan' => $totalPenghasilan,
+                'total_potongan' => $totalPotongan,
+                'gaji_bersih' => $gajiBersih,
+                'status_kirim_wa' => 0,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $existingNames[$normName] = true;
+            $existingNiks[$k->nik] = true;
+            $totalAdded++;
+        }
+
+        if ($totalAdded > 0) {
+            $updatedTotalKaryawan = DB::table('penggajian_detail')->where('periode_id', $periodeId)->count();
+            $updatedTotalGaji = DB::table('penggajian_detail')->where('periode_id', $periodeId)->sum('gaji_bersih');
+            DB::table('penggajian_periode')->where('id', $periodeId)->update([
+                'total_karyawan' => $updatedTotalKaryawan,
+                'total_gaji' => $updatedTotalGaji,
+                'updated_at' => now(),
+            ]);
+        }
+
+        return $totalAdded;
+    }
+
+    /**
+     * Synchronize all missing employees into any active / draft payroll periods.
+     */
+    public static function syncMissingEmployeesToActivePeriods()
+    {
+        $activePeriods = DB::table('penggajian_periode')
+            ->where('status', 'draft')
+            ->get();
+
+        if ($activePeriods->isEmpty()) {
+            $latest = DB::table('penggajian_periode')->orderBy('id', 'desc')->first();
+            if ($latest && $latest->status != 'terbayar') {
+                $activePeriods = collect([$latest]);
+            }
+        }
+
+        $totalAdded = 0;
+        foreach ($activePeriods as $p) {
+            $totalAdded += self::syncMissingEmployeesToPeriod($p->id);
+        }
+
+        return $totalAdded;
+    }
+
+    /**
      * View details of all employee slips in a payroll period.
      */
     public function showPeriode($id, Request $request)
@@ -518,6 +829,17 @@ class GajiController extends Controller
         $periode = DB::table('penggajian_periode')->where('id', $id)->first();
         if (!$periode) {
             return redirect('/gaji')->with(['warning' => 'Periode penggajian tidak ditemukan']);
+        }
+
+        // Auto-sync any missing employees from Data Master Karyawan
+        if ($periode->status != 'terbayar') {
+            try {
+                $newAdded = self::syncMissingEmployeesToPeriod($id);
+                if ($newAdded > 0) {
+                    $periode = DB::table('penggajian_periode')->where('id', $id)->first();
+                    session()->flash('success', $newAdded . ' karyawan baru dari Data Master otomatis ditambahkan ke periode ini dan siap disetting gajinya!');
+                }
+            } catch (\Throwable $e) {}
         }
 
         $query = DB::table('penggajian_detail')
@@ -1314,6 +1636,33 @@ class GajiController extends Controller
         // Auto sync if any master record is missing or zero
         $this->syncMasterFromExcelStandards(false);
 
+        // Auto-seed missing master records for all karyawan
+        $allExistingMasterNiks = DB::table('gaji_master')->pluck('nik')->toArray();
+        $missingKaryawan = DB::table('karyawan')->whereNotIn('nik', $allExistingMasterNiks)->get();
+        foreach ($missingKaryawan as $mk) {
+            $namaUpper = strtoupper($mk->nama_lengkap ?? '');
+            $matched = null;
+            foreach ($this->getExcelSalaryStandards() as $key => $vals) {
+                if (str_contains($namaUpper, $key)) {
+                    $matched = $vals;
+                    break;
+                }
+            }
+            $gapok = $matched ? $matched['gaji_pokok'] : 1200000;
+            $transp = $matched ? $matched['tunjangan_transportasi'] : 150000;
+            $harian = round(($gapok + $transp) / 26, 2);
+            DB::table('gaji_master')->insert([
+                'nik' => $mk->nik,
+                'gaji_pokok' => $gapok,
+                'tunjangan_transportasi' => $transp,
+                'gaji_harian' => $harian,
+                'tunjangan_jabatan' => $matched['tunjangan_jabatan'] ?? 0,
+                'potongan_kasbon' => $matched['potongan_kasbon'] ?? 0,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
         $allKaryawan = DB::table('karyawan')
             ->leftJoin('gaji_master', 'karyawan.nik', '=', 'gaji_master.nik')
             ->leftJoin('cabang', 'karyawan.kode_cabang', '=', 'cabang.kode_cabang')
@@ -1435,7 +1784,7 @@ class GajiController extends Controller
 
         // Paginate unique employees collection
         $page = LengthAwarePaginator::resolveCurrentPage() ?: 1;
-        $perPage = 15;
+        $perPage = 50;
         $currentPageItems = $filteredList->slice(($page - 1) * $perPage, $perPage)->values();
         $karyawan = new LengthAwarePaginator($currentPageItems, $filteredList->count(), $perPage, $page, [
             'path' => LengthAwarePaginator::resolveCurrentPath(),
@@ -1556,6 +1905,9 @@ class GajiController extends Controller
 
         $syncedSlips = 0;
         foreach ($activePeriods as $periode) {
+            // First ensure any missing employee has a slip created in this period
+            self::syncMissingEmployeesToPeriod($periode->id);
+
             $details = DB::table('penggajian_detail')
                 ->where('periode_id', $periode->id)
                 ->whereIn('nik', $allNiks)
@@ -1641,6 +1993,9 @@ class GajiController extends Controller
         if (!$periode) {
             return redirect('/gaji')->with(['warning' => 'Periode tidak ditemukan']);
         }
+
+        // Ensure any missing employees from Data Master are automatically added first
+        self::syncMissingEmployeesToPeriod($id);
 
         $details = DB::table('penggajian_detail')->where('periode_id', $id)->get();
         $updatedCount = 0;
