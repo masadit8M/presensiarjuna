@@ -63,24 +63,12 @@ class PresensiController extends Controller
 
         $kode_jam_kerja = $kode_jam_kerja != "null" ? Crypt::decrypt($kode_jam_kerja) : $kode_jam_kerja;
         $nik = Auth::guard('karyawan')->user()->nik;
+        
+        // Prioritas utama adalah presensi kedatangan (masuk) hari ini.
+        // Tanggal presensi selalu tanggal hari ini (date("Y-m-d")), jangan pernah dimundurkan ke kemarin
+        // meskipun kemarin belum absen pulang (karena absen pulang bersifat opsional).
         $hariini = date("Y-m-d");
-        $jamsekarang = date("H:i");
-        $tgl_sebelumnya = date('Y-m-d', strtotime("-1 days", strtotime($hariini)));
-        $cekpresensi_sebelumnya = DB::table('presensi')
-            ->join('jam_kerja', 'presensi.kode_jam_kerja', '=', 'jam_kerja.kode_jam_kerja')
-            ->where('tgl_presensi', $tgl_sebelumnya)
-            ->where('nik', $nik)
-            ->first();
-
-        $ceklintashari_presensi = $cekpresensi_sebelumnya != null  ? $cekpresensi_sebelumnya->lintashari : 0;
-
-        if ($ceklintashari_presensi == 1) {
-            if ($jamsekarang < "08:00") {
-                $hariini = $tgl_sebelumnya;
-            }
-        }
         $namahari = $this->gethari(date('D', strtotime($hariini)));
-
 
         $kode_dept = Auth::guard('karyawan')->user()->kode_dept;
         $presensi = DB::table('presensi')->where('tgl_presensi', $hariini)->where('nik', $nik);
@@ -89,17 +77,17 @@ class PresensiController extends Controller
         $kode_cabang = Auth::guard('karyawan')->user()->kode_cabang;
         $lok_kantor = DB::table('cabang')->where('kode_cabang', $kode_cabang)->first();
 
-        if ($kode_jam_kerja == "null") {
-            //Cek Jam Kerja By Date
+        if ($kode_jam_kerja == "null" || empty($kode_jam_kerja)) {
+            // Cek Jam Kerja By Date
             $jamkerja = DB::table('konfigurasi_jamkerja_by_date')
                 ->join('jam_kerja', 'konfigurasi_jamkerja_by_date.kode_jam_kerja', '=', 'jam_kerja.kode_jam_kerja')
                 ->where('nik', $nik)
                 ->where('tanggal', $hariini)
                 ->first();
 
-            //Jika Tidak Memiliki Jam Kerja By Date
+            // Jika Tidak Memiliki Jam Kerja By Date
             if ($jamkerja == null) {
-                //Cek Jam Kerja harian / Jam Kerja Khusus / Jam Kerja Per Orangannya
+                // Cek Jam Kerja harian / Jam Kerja Khusus / Jam Kerja Per Orangannya
                 $jamkerja = DB::table('konfigurasi_jamkerja')
                     ->join('jam_kerja', 'konfigurasi_jamkerja.kode_jam_kerja', '=', 'jam_kerja.kode_jam_kerja')
                     ->where('nik', $nik)->where('hari', $namahari)->first();
@@ -126,14 +114,33 @@ class PresensiController extends Controller
             $jamkerja = DB::table('jam_kerja')->where('kode_jam_kerja', $kode_jam_kerja)->first();
         }
 
-
-
-
-
+        // Fallback jika jamkerja masih null agar SEMUA karyawan dijamin bisa presensi tanpa terhalang notifjadwal
+        if ($jamkerja == null) {
+            $dtkaryawan = DB::table('karyawan')->where('nik', $nik)->first();
+            if (isset($dtkaryawan->role_jam_kerja) && !empty($dtkaryawan->role_jam_kerja)) {
+                $jamkerja = DB::table('jam_kerja')->where('nama_jam_kerja', $dtkaryawan->role_jam_kerja)->first();
+            }
+            if ($jamkerja == null) {
+                $jamkerja = DB::table('jam_kerja')->first();
+            }
+            if ($jamkerja == null) {
+                $jamkerja = (object)[
+                    'kode_jam_kerja' => 'REG',
+                    'nama_jam_kerja' => 'Reguler',
+                    'awal_jam_masuk' => '05:00:00',
+                    'jam_masuk' => '07:00:00',
+                    'akhir_jam_masuk' => '11:00:00',
+                    'jam_pulang' => '12:00:00',
+                    'lintashari' => 0
+                ];
+            }
+        }
 
         $datakaryawan = DB::table('karyawan')->where('nik', $nik)->first();
         $namaUpper = strtoupper(trim($datakaryawan->nama_lengkap ?? ''));
-        $isKepalaSekolah = (isset($datakaryawan->role_jam_kerja) && strtolower($datakaryawan->role_jam_kerja) == 'kepala sekolah');
+        $isKepalaSekolah = (isset($datakaryawan->role_jam_kerja) && strtolower($datakaryawan->role_jam_kerja) == 'kepala sekolah')
+            || (isset($datakaryawan->jabatan) && str_contains(strtolower($datakaryawan->jabatan), 'kepala sekolah'))
+            || (isset($datakaryawan->jabatan) && str_contains(strtolower($datakaryawan->jabatan), 'kepsek'));
         $isSpecialBypassLocation = (
             str_contains($namaUpper, 'CINDY') ||
             str_contains($namaUpper, 'MAGDALENA') ||
@@ -151,12 +158,17 @@ class PresensiController extends Controller
         }
         $isBypassRadius = ($status_location == 0 || $isKepalaSekolah || $isSpecialBypassLocation);
 
+        // Auto-heal database: pastikan semua shift tidak salah tersetting lintashari = 1
+        try {
+            DB::table('jam_kerja')
+                ->where('lintashari', '!=', 0)
+                ->update(['lintashari' => 0]);
+        } catch (\Throwable $e) {}
+
         if ($datapresensi != null && $datapresensi->status != "h") {
             return view('presensi.notifizin');
-        } else if ($jamkerja == null) {
-            return view('presensi.notifjadwal');
         } else {
-            return view('presensi.create', compact('cek', 'lok_kantor', 'jamkerja', 'hariini', 'kode_jam_kerja', 'isBypassRadius'));
+            return view('presensi.create', compact('cek', 'lok_kantor', 'jamkerja', 'hariini', 'kode_jam_kerja', 'isBypassRadius', 'datapresensi'));
         }
     }
 
@@ -166,21 +178,16 @@ class PresensiController extends Controller
         $nik = Auth::guard('karyawan')->user()->nik;
         $datakaryawan = DB::table('karyawan')->where('nik', $nik)->first();
         $status_location = $datakaryawan->status_location ?? (Auth::guard('karyawan')->user()->status_location ?? 1);
+        
+        // Prioritas utama adalah kedatangan hari ini
+        // Presensi selalu menggunakan tanggal hari ini (date("Y-m-d")), tidak pernah dimundurkan ke kemarin
+        // meskipun kemarin belum absen pulang (karena absen pulang bersifat opsional).
         $hariini = date("Y-m-d");
-        $jamsekarang = date("H:i");
-        $tgl_sebelumnya = date('Y-m-d', strtotime("-1 days", strtotime($hariini)));
-        $cekpresensi_sebelumnya = DB::table('presensi')
-            ->join('jam_kerja', 'presensi.kode_jam_kerja', '=', 'jam_kerja.kode_jam_kerja')
-            ->where('tgl_presensi', $tgl_sebelumnya)
-            ->where('nik', $nik)
-            ->first();
-
-        $ceklintashari_presensi = $cekpresensi_sebelumnya != null  ? $cekpresensi_sebelumnya->lintashari : 0;
-
+        $tgl_presensi = $hariini;
+        $jam = date("H:i:s");
+        
         $kode_cabang = Auth::guard('karyawan')->user()->kode_cabang;
         $kode_dept = Auth::guard('karyawan')->user()->kode_dept;
-        $tgl_presensi = $ceklintashari_presensi == 1 && $jamsekarang < "08:00" ? $tgl_sebelumnya : date("Y-m-d");
-        $jam = date("H:i:s");
         $lok_kantor = DB::table('cabang')->where('kode_cabang', $kode_cabang)->first();
         
         $latitudekantor = 0;
@@ -202,20 +209,20 @@ class PresensiController extends Controller
             $radius = round($jarak["meters"] ?? 0);
         }
 
-        //Cek Jam Kerja Karyawan
+        // Cek Jam Kerja Karyawan
         $namahari = $this->gethari(date('D', strtotime($tgl_presensi)));
 
-        if ($kode_jam_kerja == "null") {
-            //Cek Jam Kerja By Date
+        if ($kode_jam_kerja == "null" || empty($kode_jam_kerja)) {
+            // Cek Jam Kerja By Date
             $jamkerja = DB::table('konfigurasi_jamkerja_by_date')
                 ->join('jam_kerja', 'konfigurasi_jamkerja_by_date.kode_jam_kerja', '=', 'jam_kerja.kode_jam_kerja')
                 ->where('nik', $nik)
                 ->where('tanggal', $tgl_presensi)
                 ->first();
 
-            //Jika Tidak Memiliki Jam Kerja By Date
+            // Jika Tidak Memiliki Jam Kerja By Date
             if ($jamkerja == null) {
-                //Cek Jam Kerja harian / Jam Kerja Khusus / Jam Kerja Per Orangannya
+                // Cek Jam Kerja harian / Jam Kerja Khusus / Jam Kerja Per Orangannya
                 $jamkerja = DB::table('konfigurasi_jamkerja')
                     ->join('jam_kerja', 'konfigurasi_jamkerja.kode_jam_kerja', '=', 'jam_kerja.kode_jam_kerja')
                     ->where('nik', $nik)->where('hari', $namahari)->first();
@@ -241,6 +248,27 @@ class PresensiController extends Controller
             $jamkerja = DB::table('jam_kerja')->where('kode_jam_kerja', $kode_jam_kerja)->first();
         }
 
+        // Fallback jika jamkerja belum ditemukan agar SEMUA karyawan bisa presensi
+        if ($jamkerja == null) {
+            if (isset($datakaryawan->role_jam_kerja) && !empty($datakaryawan->role_jam_kerja)) {
+                $jamkerja = DB::table('jam_kerja')->where('nama_jam_kerja', $datakaryawan->role_jam_kerja)->first();
+            }
+            if ($jamkerja == null) {
+                $jamkerja = DB::table('jam_kerja')->first();
+            }
+            if ($jamkerja == null) {
+                $jamkerja = (object)[
+                    'kode_jam_kerja' => 'REG',
+                    'nama_jam_kerja' => 'Reguler',
+                    'awal_jam_masuk' => '05:00:00',
+                    'jam_masuk' => '07:00:00',
+                    'akhir_jam_masuk' => '11:00:00',
+                    'jam_pulang' => '12:00:00',
+                    'lintashari' => 0
+                ];
+            }
+        }
+
         $presensi = DB::table('presensi')->where('tgl_presensi', $tgl_presensi)->where('nik', $nik);
         $cek = $presensi->count();
         $datapresensi = $presensi->first();
@@ -249,21 +277,41 @@ class PresensiController extends Controller
         } else {
             $ket = "in";
         }
+
+        // Validasi Foto Selfie secara defensif
         $image = $request->image;
+        if (empty($image) || !str_contains($image, ';base64')) {
+            echo "error|Foto selfie tidak terdeteksi atau kamera belum siap. Silakan ulangi lagi.|" . $ket;
+            return;
+        }
+
         $folderPath = "public/uploads/absensi/";
         $formatName = $nik . "-" . $tgl_presensi . "-" . $ket;
         $image_parts = explode(";base64", $image);
-        $image_base64 = base64_decode($image_parts[1]);
+        if (!isset($image_parts[1]) || empty($image_parts[1])) {
+            echo "error|Format foto selfie tidak valid. Silakan ulangi lagi.|" . $ket;
+            return;
+        }
+        $image_base64 = base64_decode(trim(str_replace(',', '', $image_parts[1])));
+        if (!$image_base64) {
+            $clean_b64 = preg_replace('#^data:image/\w+;base64,#i', '', $image);
+            $image_base64 = base64_decode($clean_b64);
+        }
+        if (!$image_base64) {
+            echo "error|Gagal memproses gambar selfie. Pastikan kamera berfungsi dengan baik.|" . $ket;
+            return;
+        }
+
         $fileName = $formatName . ".png";
         $file = $folderPath . $fileName;
 
-        $tgl_pulang = $jamkerja->lintashari == 1 ? date('Y-m-d', strtotime("+ 1 days", strtotime($tgl_presensi))) : $tgl_presensi;
-        $jam_pulang = $hariini . " " . $jam;
-        $jamkerja_pulang = $tgl_pulang . " " . $jamkerja->jam_pulang;
         $no_hp = $datakaryawan->no_hp ?? '';
         
         $namaUpper = strtoupper(trim($datakaryawan->nama_lengkap ?? ''));
-        $isKepalaSekolah = (isset($datakaryawan->role_jam_kerja) && strtolower($datakaryawan->role_jam_kerja) == 'kepala sekolah');
+        $isKepalaSekolah = (isset($datakaryawan->role_jam_kerja) && strtolower($datakaryawan->role_jam_kerja) == 'kepala sekolah')
+            || (isset($datakaryawan->jabatan) && str_contains(strtolower($datakaryawan->jabatan), 'kepala sekolah'))
+            || (isset($datakaryawan->jabatan) && str_contains(strtolower($datakaryawan->jabatan), 'kepsek'));
+
         $isSpecialBypassLocation = (
             str_contains($namaUpper, 'CINDY') ||
             str_contains($namaUpper, 'MAGDALENA') ||
@@ -281,90 +329,96 @@ class PresensiController extends Controller
 
         $isBypassRadius = ($status_location == 0 || $isKepalaSekolah || $isSpecialBypassLocation);
 
-        if (!$isBypassRadius && $lok_kantor && $radius > ($lok_kantor->radius_cabang ?? 0)) {
-            echo "error|Maaf Anda Berada Diluar Radius, Jarak Anda " . $radius . " meter dari Kantor|radius";
-        } else {
-            $saveLokasi = !empty($lokasi) ? $lokasi : ($lok_kantor->lokasi_cabang ?? '-');
-            if ($cek > 0) {
-                if ($jam_pulang < $jamkerja_pulang) {
-                    echo "error|Maaf Belum Waktunya Pulang |out";
-                } else if (!empty($datapresensi->jam_out)) {
-                    echo "error|Anda Sudah Melakukan Absen Pulang Sebelmnya ! |out";
-                } else {
-                    $data_pulang = [
-                        'jam_out' => $jam,
-                        'foto_out' => $fileName,
-                        'lokasi_out' => $saveLokasi
-                    ];
-                    $update = DB::table('presensi')->where('tgl_presensi', $tgl_presensi)->where('nik', $nik)->update($data_pulang);
-                    if ($update) {
-                        echo "success|Terimkasih, Hati Hati Di Jalan|out";
-                        Storage::put($file, $image_base64);
+        // Toleransi radius kantor yang wajar (minimal 250 meter) agar tidak gagal karena drift sinyal GPS HP
+        $radius_limit = max(250, (int)($lok_kantor->radius_cabang ?? 50));
 
-                        $gatewayUrl = env('WA_GATEWAY_URL');
-                        if (!empty($gatewayUrl) && !str_contains($gatewayUrl, 'pedasalami.com')) {
-                            $curl = curl_init();
-                            curl_setopt_array($curl, array(
-                                CURLOPT_URL => $gatewayUrl,
-                                CURLOPT_RETURNTRANSFER => true,
-                                CURLOPT_ENCODING => '',
-                                CURLOPT_MAXREDIRS => 5,
-                                CURLOPT_TIMEOUT => 3,
-                                CURLOPT_FOLLOWLOCATION => true,
-                                CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-                                CURLOPT_CUSTOMREQUEST => 'POST',
-                                CURLOPT_POSTFIELDS => array('message' => 'Terimakasih Sudah Melakukan Absen Pulang, Anda Melakukan Absen Pada Jam ' . $jam, 'number' => $no_hp, 'file_dikirim' => ''),
-                            ));
-                            $response = curl_exec($curl);
-                            curl_close($curl);
-                        }
-                        //echo $response;
-                    } else {
-                        echo "error|Maaf Gagal absen, Hubungi Tim It|out";
-                    }
+        if (!$isBypassRadius && $lok_kantor && $radius > $radius_limit) {
+            echo "error|Maaf Anda Berada Diluar Radius, Jarak Anda " . $radius . " meter dari Kantor (Batas: " . $radius_limit . "m)|radius";
+            return;
+        }
+
+        $saveLokasi = !empty($lokasi) ? $lokasi : ($lok_kantor->lokasi_cabang ?? '-');
+
+        if ($cek > 0) {
+            // PRESENSI PULANG (OPSIONAL)
+            // Presensi kedatangan sudah selesai dilakukan. Presensi pulang adalah opsional.
+            // Tidak boleh memblokir karyawan dengan 'Belum Waktunya Pulang' agar fleksibel.
+            if (!empty($datapresensi->jam_out)) {
+                echo "error|Anda Sudah Melakukan Absen Pulang Sebelumnya ! |out";
+                return;
+            }
+
+            $data_pulang = [
+                'jam_out' => $jam,
+                'foto_out' => $fileName,
+                'lokasi_out' => $saveLokasi
+            ];
+            $update = DB::table('presensi')->where('tgl_presensi', $tgl_presensi)->where('nik', $nik)->update($data_pulang);
+            if ($update) {
+                echo "success|Terimakasih, Hati Hati Di Jalan|out";
+                Storage::put($file, $image_base64);
+
+                $gatewayUrl = env('WA_GATEWAY_URL');
+                if (!empty($gatewayUrl) && !str_contains($gatewayUrl, 'pedasalami.com')) {
+                    try {
+                        $curl = curl_init();
+                        curl_setopt_array($curl, array(
+                            CURLOPT_URL => $gatewayUrl,
+                            CURLOPT_RETURNTRANSFER => true,
+                            CURLOPT_ENCODING => '',
+                            CURLOPT_MAXREDIRS => 5,
+                            CURLOPT_TIMEOUT => 3,
+                            CURLOPT_FOLLOWLOCATION => true,
+                            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+                            CURLOPT_CUSTOMREQUEST => 'POST',
+                            CURLOPT_POSTFIELDS => array('message' => 'Terimakasih Sudah Melakukan Absen Pulang, Anda Melakukan Absen Pada Jam ' . $jam, 'number' => $no_hp, 'file_dikirim' => ''),
+                        ));
+                        curl_exec($curl);
+                        curl_close($curl);
+                    } catch (\Throwable $e) {}
                 }
             } else {
-                if ($jam < $jamkerja->awal_jam_masuk) {
-                    echo "error|Maaf Belum Waktunya Melakuan Presensi|in";
-                } else if ($jam > $jamkerja->akhir_jam_masuk) {
-                    echo "error|Maaf Waktu Untuk Presensi Sudah Habis |in";
-                } else {
-                    $data = [
-                        'nik' => $nik,
-                        'tgl_presensi' => $tgl_presensi,
-                        'jam_in' => $jam,
-                        'foto_in' => $fileName,
-                        'lokasi_in' => $saveLokasi,
-                        'kode_jam_kerja' => $jamkerja->kode_jam_kerja,
-                        'status' => 'h'
-                    ];
-                    $simpan = DB::table('presensi')->insert($data);
-                    if ($simpan) {
-                        echo "success|Terimkasih, Selamat Bekerja|in";
+                echo "error|Maaf Gagal Absen Pulang, Hubungi Tim IT|out";
+            }
+        } else {
+            // PRESENSI KEDATANGAN / MASUK (PRIORITAS UTAMA)
+            // Semua karyawan berhak melakukan presensi masuk setiap pagi/siang saat tiba di sekolah.
+            // Jangan pernah tolak presensi kedatangan hanya karena datang lebih awal atau sedikit lewat jam.
+            $data = [
+                'nik' => $nik,
+                'tgl_presensi' => $tgl_presensi,
+                'jam_in' => $jam,
+                'foto_in' => $fileName,
+                'lokasi_in' => $saveLokasi,
+                'kode_jam_kerja' => $jamkerja->kode_jam_kerja ?? 'REG',
+                'status' => 'h'
+            ];
+            $simpan = DB::table('presensi')->insert($data);
+            if ($simpan) {
+                echo "success|Terimkasih, Selamat Bekerja|in";
+                Storage::put($file, $image_base64);
 
-                        $gatewayUrl = env('WA_GATEWAY_URL');
-                        if (!empty($gatewayUrl) && !str_contains($gatewayUrl, 'pedasalami.com')) {
-                            $curl = curl_init();
-                            curl_setopt_array($curl, array(
-                                CURLOPT_URL => $gatewayUrl,
-                                CURLOPT_RETURNTRANSFER => true,
-                                CURLOPT_ENCODING => '',
-                                CURLOPT_MAXREDIRS => 5,
-                                CURLOPT_TIMEOUT => 3,
-                                CURLOPT_FOLLOWLOCATION => true,
-                                CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-                                CURLOPT_CUSTOMREQUEST => 'POST',
-                                CURLOPT_POSTFIELDS => array('message' => 'Terimakasih Sudah Melakukan Absen Masuk, Anda Melakukan Absen Pada Jam ' . $jam, 'number' => $no_hp, 'file_dikirim' => ''),
-                            ));
-                            $response = curl_exec($curl);
-                            curl_close($curl);
-                        }
-                        //echo $response;
-                        Storage::put($file, $image_base64);
-                    } else {
-                        echo "error|Maaf Gagal absen, Hubungi Tim It|in";
-                    }
+                $gatewayUrl = env('WA_GATEWAY_URL');
+                if (!empty($gatewayUrl) && !str_contains($gatewayUrl, 'pedasalami.com')) {
+                    try {
+                        $curl = curl_init();
+                        curl_setopt_array($curl, array(
+                            CURLOPT_URL => $gatewayUrl,
+                            CURLOPT_RETURNTRANSFER => true,
+                            CURLOPT_ENCODING => '',
+                            CURLOPT_MAXREDIRS => 5,
+                            CURLOPT_TIMEOUT => 3,
+                            CURLOPT_FOLLOWLOCATION => true,
+                            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+                            CURLOPT_CUSTOMREQUEST => 'POST',
+                            CURLOPT_POSTFIELDS => array('message' => 'Terimakasih Sudah Melakukan Absen Masuk, Anda Melakukan Absen Pada Jam ' . $jam, 'number' => $no_hp, 'file_dikirim' => ''),
+                        ));
+                        curl_exec($curl);
+                        curl_close($curl);
+                    } catch (\Throwable $e) {}
                 }
+            } else {
+                echo "error|Maaf Gagal Absen Masuk, Hubungi Tim IT|in";
             }
         }
     }
@@ -1045,9 +1099,11 @@ class PresensiController extends Controller
         $nik = Auth::guard('karyawan')->user()->nik;
         $hariini = date('Y-m-d');
         $cekpresensi = DB::table('presensi')->where('nik', $nik)->where('tgl_presensi', $hariini)->first();
-        if (!empty($cekpresensi)) {
+        if (!empty($cekpresensi) && !empty($cekpresensi->kode_jam_kerja)) {
             $kode_jam_kerja = Crypt::encrypt($cekpresensi->kode_jam_kerja);
             return redirect('/presensi/' . $kode_jam_kerja . '/create');
+        } else if (!empty($cekpresensi)) {
+            return redirect('/presensi/null/create');
         }
         $jamkerja = DB::table('jam_kerja')->get();
         return view('presensi.pilihjamkerja', compact('jamkerja'));

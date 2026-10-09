@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Str;
 
 class GajiController extends Controller
 {
@@ -153,9 +154,46 @@ class GajiController extends Controller
                 $table->tinyInteger('status_kirim_wa')->default(0);
                 $table->dateTime('waktu_kirim_wa')->nullable();
                 $table->string('pdf_path', 255)->nullable();
+                $table->string('link_token', 64)->nullable()->index();
+                $table->tinyInteger('link_expired')->default(0);
+                $table->integer('download_count')->default(0);
+                $table->dateTime('download_at')->nullable();
+                $table->string('download_ip', 45)->nullable();
+                $table->text('download_user_agent')->nullable();
                 $table->timestamps();
             });
         } else {
+            if (!Schema::hasColumn('penggajian_detail', 'link_token')) {
+                Schema::table('penggajian_detail', function (Blueprint $table) {
+                    $table->string('link_token', 64)->nullable()->after('pdf_path')->index();
+                });
+            }
+            if (!Schema::hasColumn('penggajian_detail', 'link_expired')) {
+                Schema::table('penggajian_detail', function (Blueprint $table) {
+                    $table->tinyInteger('link_expired')->default(0)->after('link_token');
+                });
+            }
+            if (!Schema::hasColumn('penggajian_detail', 'download_count')) {
+                Schema::table('penggajian_detail', function (Blueprint $table) {
+                    $table->integer('download_count')->default(0)->after('link_expired');
+                });
+            }
+            if (!Schema::hasColumn('penggajian_detail', 'download_at')) {
+                Schema::table('penggajian_detail', function (Blueprint $table) {
+                    $table->dateTime('download_at')->nullable()->after('download_count');
+                });
+            }
+            if (!Schema::hasColumn('penggajian_detail', 'download_ip')) {
+                Schema::table('penggajian_detail', function (Blueprint $table) {
+                    $table->string('download_ip', 45)->nullable()->after('download_at');
+                });
+            }
+            if (!Schema::hasColumn('penggajian_detail', 'download_user_agent')) {
+                Schema::table('penggajian_detail', function (Blueprint $table) {
+                    $table->text('download_user_agent')->nullable()->after('download_ip');
+                });
+            }
+
             $detailKetCols = [
                 'ket_tunjangan_jabatan',
                 'ket_tunjangan_konsumsi',
@@ -873,6 +911,7 @@ class GajiController extends Controller
             'total_gaji_bersih' => $details->sum('gaji_bersih'),
             'total_potongan' => $details->sum('total_potongan'),
             'total_wa_terkirim' => $details->where('status_kirim_wa', 1)->count(),
+            'total_diunduh' => $details->where('download_count', '>', 0)->count(),
         ];
 
         return view('gaji.show', compact('periode', 'details', 'cabang', 'departemen', 'stats'));
@@ -1116,21 +1155,36 @@ class GajiController extends Controller
 
         // Generate PDF
         $pdfRelPath = SlipPdfService::generatePdf($detail);
-        DB::table('penggajian_detail')->where('id', $id)->update([
-            'pdf_path' => $pdfRelPath,
-            'status_kirim_wa' => 1,
-            'waktu_kirim_wa' => now(),
-        ]);
+
+        // Generate or reuse unique one-time link token
+        $token = $detail->link_token ?? null;
+        if (empty($token) || !empty($detail->link_expired)) {
+            $token = Str::random(32);
+            DB::table('penggajian_detail')->where('id', $id)->update([
+                'pdf_path' => $pdfRelPath,
+                'link_token' => $token,
+                'link_expired' => 0,
+                'download_count' => 0,
+                'download_at' => null,
+                'status_kirim_wa' => 1,
+                'waktu_kirim_wa' => now(),
+            ]);
+        } else {
+            DB::table('penggajian_detail')->where('id', $id)->update([
+                'pdf_path' => $pdfRelPath,
+                'status_kirim_wa' => 1,
+                'waktu_kirim_wa' => now(),
+            ]);
+        }
 
         // Build absolute public PDF download URL via public route (never 404, no login required)
         $host = request()->getSchemeAndHttpHost();
         if (str_contains($host, 'localhost') && config('app.url') && !str_contains(config('app.url'), 'localhost')) {
             $host = rtrim(config('app.url'), '/');
         }
-        $token = substr(md5($detail->nik . $detail->id . 'arjuna_slip_token'), 0, 12);
         $publicPdfUrl = rtrim($host, '/') . '/slip-gaji/dokumen/' . $detail->id . '/' . $token;
 
-        // Prepare professional WhatsApp message text
+        // Prepare professional WhatsApp message text with clear 1-time access notice
         $msg = "Assalamu'alaikum Wr. Wb.\n";
         $msg .= "Yth. *" . strtoupper($detail->nama_lengkap) . "*,\n\n";
         $msg .= "Berikut kami lampirkan dokumen resmi *SLIP GAJI* Anda:\n";
@@ -1140,8 +1194,11 @@ class GajiController extends Controller
         $msg .= "------------------------------------\n";
         $msg .= "💵 *Gaji Bersih (THP):* Rp " . number_format($detail->gaji_bersih, 0, ',', '.') . "\n";
         $msg .= "------------------------------------\n";
-        $msg .= "📄 *Lihat / Unduh Dokumen PDF Resmi:*\n";
+        $msg .= "📄 *Link Slip Gaji (1x Akses):*\n";
         $msg .= $publicPdfUrl . "\n\n";
+        $msg .= "🔒 *PERHATIAN KEAMANAN:*\n";
+        $msg .= "Demi menjaga kerahasiaan nominal gaji, link di atas *hanya bisa dibuka & diunduh 1 (satu) kali*. Mohon langsung unduh dan simpan file PDF ke HP/perangkat Anda.\n\n";
+        $msg .= "⚠️ Jika link sudah tidak aktif dan ingin download ulang, silakan melapor ke Superadmin di *masaditfb@gmail.com*.\n\n";
         $msg .= "_Dibuat oleh: Kartika P. (Bendahara Yayasan)_\n";
         $msg .= "_PAUD Arjuna Cendekia_";
 
@@ -1185,12 +1242,90 @@ class GajiController extends Controller
             ->first();
 
         if (!$detail) {
+            return view('gaji.slip_expired', [
+                'status' => 'not_found',
+                'detail' => null,
+                'superadminEmail' => 'masaditfb@gmail.com',
+            ]);
+        }
+
+        // WhatsApp / Social media crawler detection (do not consume token on preview crawl)
+        $userAgent = request()->userAgent() ?? '';
+        $isBot = preg_match('/(facebookexternalhit|WhatsApp|Facebot|Twitterbot|TelegramBot|Slackbot|LinkedInBot|Googlebot|bingbot|crawler|spider)/i', $userAgent)
+            || request()->header('Sec-Purpose') === 'prefetch'
+            || request()->header('Purpose') === 'prefetch';
+
+        if ($isBot) {
+            return view('gaji.slip_preview_bot', compact('detail'));
+        }
+
+        // Verify token (supports both current random token and legacy md5 token)
+        $expectedLegacyToken = substr(md5($detail->nik . $detail->id . 'arjuna_slip_token'), 0, 12);
+        $isValid = (!empty($detail->link_token) && hash_equals($detail->link_token, $token)) 
+            || hash_equals($expectedLegacyToken, $token);
+
+        if (!$isValid) {
+            return view('gaji.slip_expired', [
+                'status' => 'invalid',
+                'detail' => null,
+                'superadminEmail' => 'masaditfb@gmail.com',
+            ]);
+        }
+
+        // Check if link is already expired / downloaded
+        if (!empty($detail->link_expired) || (!empty($detail->download_count) && $detail->download_count >= 1)) {
+            return view('gaji.slip_expired', [
+                'status' => 'expired',
+                'detail' => $detail,
+                'superadminEmail' => 'masaditfb@gmail.com',
+            ]);
+        }
+
+        // First time access: render secure single-use portal
+        return view('gaji.slip_portal', compact('detail', 'token'));
+    }
+
+    /**
+     * Publicly download slip PDF via WhatsApp link (single-use / one-time only).
+     */
+    public function downloadPublicSlip($id, $token)
+    {
+        $this->ensureTablesExist();
+
+        $detail = DB::table('penggajian_detail')
+            ->join('karyawan', 'penggajian_detail.nik', '=', 'karyawan.nik')
+            ->join('penggajian_periode', 'penggajian_detail.periode_id', '=', 'penggajian_periode.id')
+            ->leftJoin('cabang', 'penggajian_detail.kode_cabang', '=', 'cabang.kode_cabang')
+            ->where('penggajian_detail.id', $id)
+            ->select('penggajian_detail.*', 'karyawan.nama_lengkap', 'penggajian_periode.nama_periode', 'penggajian_periode.tgl_selesai', 'cabang.nama_cabang')
+            ->first();
+
+        if (!$detail) {
             abort(404, 'Dokumen Slip Gaji tidak ditemukan.');
         }
 
-        $expectedToken = substr(md5($detail->nik . $detail->id . 'arjuna_slip_token'), 0, 12);
-        if ($token !== $expectedToken) {
-            abort(403, 'Akses link slip gaji tidak valid.');
+        // WhatsApp / Bot check: do not consume download
+        $userAgent = request()->userAgent() ?? '';
+        $isBot = preg_match('/(facebookexternalhit|WhatsApp|Facebot|Twitterbot|TelegramBot|Slackbot|LinkedInBot|Googlebot|bingbot|crawler|spider)/i', $userAgent)
+            || request()->header('Sec-Purpose') === 'prefetch'
+            || request()->header('Purpose') === 'prefetch';
+
+        if ($isBot) {
+            return view('gaji.slip_preview_bot', compact('detail'));
+        }
+
+        // Verify token
+        $expectedLegacyToken = substr(md5($detail->nik . $detail->id . 'arjuna_slip_token'), 0, 12);
+        $isValid = (!empty($detail->link_token) && hash_equals($detail->link_token, $token)) 
+            || hash_equals($expectedLegacyToken, $token);
+
+        if (!$isValid) {
+            return redirect('/slip-gaji/dokumen/' . $id . '/' . $token);
+        }
+
+        // Check if already expired / downloaded
+        if (!empty($detail->link_expired) || (!empty($detail->download_count) && $detail->download_count >= 1)) {
+            return redirect('/slip-gaji/dokumen/' . $id . '/' . $token);
         }
 
         $filename = 'slip_' . $detail->id . '_' . $detail->nik . '.pdf';
@@ -1209,92 +1344,88 @@ class GajiController extends Controller
             abort(404, 'Gagal memuat dokumen slip PDF.');
         }
 
+        // MARK AS CONSUMED / EXPIRED IMMEDIATELY
+        DB::table('penggajian_detail')->where('id', $id)->update([
+            'link_expired' => 1,
+            'download_count' => DB::raw('download_count + 1'),
+            'download_at' => now(),
+            'download_ip' => request()->ip(),
+            'download_user_agent' => substr($userAgent, 0, 500),
+        ]);
+
         $cleanName = 'Slip_Gaji_' . preg_replace('/[^A-Za-z0-9]/', '_', $detail->nama_lengkap) . '_' . $detail->nik . '.pdf';
 
-        return response()->file($fullPath, [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="' . $cleanName . '"',
-            'Cache-Control' => 'no-cache, private',
+        if (request()->query('inline') == '1') {
+            return response()->file($fullPath, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="' . $cleanName . '"',
+                'Cache-Control' => 'no-store, no-cache, must-revalidate, private',
+            ]);
+        }
+
+        return response()->download($fullPath, $cleanName, [
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, private',
         ]);
     }
 
     /**
-     * Publicly download slip PDF via WhatsApp link.
+     * Reset 1-time download link for a specific employee slip detail (Superadmin action).
      */
-    public function downloadPublicSlip($id, $token)
+    public function resetLink($id)
     {
         $this->ensureTablesExist();
 
         $detail = DB::table('penggajian_detail')
             ->join('karyawan', 'penggajian_detail.nik', '=', 'karyawan.nik')
-            ->join('penggajian_periode', 'penggajian_detail.periode_id', '=', 'penggajian_periode.id')
-            ->leftJoin('cabang', 'penggajian_detail.kode_cabang', '=', 'cabang.kode_cabang')
             ->where('penggajian_detail.id', $id)
-            ->select('penggajian_detail.*', 'karyawan.nama_lengkap', 'penggajian_periode.nama_periode', 'penggajian_periode.tgl_selesai', 'cabang.nama_cabang')
+            ->select('penggajian_detail.id', 'penggajian_detail.periode_id', 'karyawan.nama_lengkap')
             ->first();
 
         if (!$detail) {
-            abort(404, 'Dokumen Slip Gaji tidak ditemukan.');
+            return redirect()->back()->with(['warning' => 'Data slip gaji tidak ditemukan']);
         }
 
-        $expectedToken = substr(md5($detail->nik . $detail->id . 'arjuna_slip_token'), 0, 12);
-        if ($token !== $expectedToken) {
-            abort(403, 'Akses link slip gaji tidak valid.');
-        }
+        $newToken = Str::random(32);
+        DB::table('penggajian_detail')->where('id', $id)->update([
+            'link_token' => $newToken,
+            'link_expired' => 0,
+            'download_count' => 0,
+            'download_at' => null,
+            'download_ip' => null,
+            'download_user_agent' => null,
+        ]);
 
-        $filename = 'slip_' . $detail->id . '_' . $detail->nik . '.pdf';
-        $fullPath = public_path('uploads/slip/' . $filename);
-
-        if (!file_exists($fullPath)) {
-            SlipPdfService::generatePdf($detail);
-        }
-
-        $cleanName = 'Slip_Gaji_' . preg_replace('/[^A-Za-z0-9]/', '_', $detail->nama_lengkap) . '_' . $detail->nik . '.pdf';
-
-        return response()->download($fullPath, $cleanName);
+        return redirect()->back()->with(['success' => 'Link slip gaji atas nama ' . $detail->nama_lengkap . ' berhasil di-reset! Link kini aktif kembali untuk 1x unduh. Silakan kirimkan kembali via WhatsApp.']);
     }
 
     /**
-     * Fallback file server for /uploads/slip/{filename} links (handles legacy links).
+     * Reset 1-time download link for all slips in a period (Superadmin action).
      */
-    public function serveSlipFile($filename)
+    public function resetLinkSemua($periode_id)
     {
-        $filename = basename($filename);
-        $fullPath = public_path('uploads/slip/' . $filename);
+        $this->ensureTablesExist();
 
-        if (!file_exists($fullPath)) {
-            $altPath = base_path('public/uploads/slip/' . $filename);
-            if (file_exists($altPath)) {
-                $fullPath = $altPath;
-            }
-        }
-
-        // If file doesn't exist on disk, auto-generate by parsing ID from slip_{id}_{nik}.pdf
-        if (!file_exists($fullPath)) {
-            if (preg_match('/^slip_(\d+)_/i', $filename, $matches)) {
-                $id = $matches[1];
-                $detail = DB::table('penggajian_detail')
-                    ->join('karyawan', 'penggajian_detail.nik', '=', 'karyawan.nik')
-                    ->join('penggajian_periode', 'penggajian_detail.periode_id', '=', 'penggajian_periode.id')
-                    ->leftJoin('cabang', 'penggajian_detail.kode_cabang', '=', 'cabang.kode_cabang')
-                    ->where('penggajian_detail.id', $id)
-                    ->select('penggajian_detail.*', 'karyawan.nama_lengkap', 'penggajian_periode.nama_periode', 'penggajian_periode.tgl_selesai', 'cabang.nama_cabang')
-                    ->first();
-                if ($detail) {
-                    SlipPdfService::generatePdf($detail);
-                }
-            }
-        }
-
-        if (file_exists($fullPath)) {
-            return response()->file($fullPath, [
-                'Content-Type' => 'application/pdf',
-                'Content-Disposition' => 'inline; filename="' . $filename . '"',
-                'Cache-Control' => 'no-cache, private',
+        $details = DB::table('penggajian_detail')->where('periode_id', $periode_id)->get();
+        foreach ($details as $d) {
+            DB::table('penggajian_detail')->where('id', $d->id)->update([
+                'link_token' => Str::random(32),
+                'link_expired' => 0,
+                'download_count' => 0,
+                'download_at' => null,
+                'download_ip' => null,
+                'download_user_agent' => null,
             ]);
         }
 
-        abort(404, 'Dokumen Slip Gaji tidak ditemukan.');
+        return redirect()->back()->with(['success' => 'Seluruh link slip gaji periode ini (' . count($details) . ' karyawan) telah di-reset dan aktif kembali untuk 1x akses.']);
+    }
+
+    /**
+     * Fallback file server for /uploads/slip/{filename} links (blocks direct unauthorized access).
+     */
+    public function serveSlipFile($filename)
+    {
+        abort(403, 'Akses langsung tidak diizinkan. Silakan buka slip gaji melalui tautan resmi yang dikirimkan via WhatsApp.');
     }
 
     /**
@@ -1327,7 +1458,22 @@ class GajiController extends Controller
 
             if ($detail) {
                 $pdfRelPath = SlipPdfService::generatePdf($detail);
-                DB::table('penggajian_detail')->where('id', $d->id)->update(['pdf_path' => $pdfRelPath]);
+
+                // Generate fresh one-time token if empty or expired
+                $token = $detail->link_token ?? null;
+                if (empty($token) || !empty($detail->link_expired)) {
+                    $token = Str::random(32);
+                    DB::table('penggajian_detail')->where('id', $d->id)->update([
+                        'pdf_path' => $pdfRelPath,
+                        'link_token' => $token,
+                        'link_expired' => 0,
+                        'download_count' => 0,
+                        'download_at' => null,
+                    ]);
+                } else {
+                    DB::table('penggajian_detail')->where('id', $d->id)->update(['pdf_path' => $pdfRelPath]);
+                }
+
                 $generatedCount++;
 
                 if ($hasGateway && !empty($detail->no_hp)) {
@@ -1342,7 +1488,6 @@ class GajiController extends Controller
                     if (str_contains($host, 'localhost') && config('app.url') && !str_contains(config('app.url'), 'localhost')) {
                         $host = rtrim(config('app.url'), '/');
                     }
-                    $token = substr(md5($detail->nik . $detail->id . 'arjuna_slip_token'), 0, 12);
                     $publicPdfUrl = rtrim($host, '/') . '/slip-gaji/dokumen/' . $detail->id . '/' . $token;
 
                     $msg = "Assalamu'alaikum Wr. Wb.\n";
@@ -1351,8 +1496,11 @@ class GajiController extends Controller
                     $msg .= "📋 *Periode:* " . $detail->nama_periode . "\n";
                     $msg .= "💵 *Gaji Bersih (THP):* Rp " . number_format($detail->gaji_bersih, 0, ',', '.') . "\n";
                     $msg .= "------------------------------------\n";
-                    $msg .= "📄 *Unduh Dokumen PDF Resmi:*\n";
+                    $msg .= "📄 *Link Slip Gaji (1x Unduh):*\n";
                     $msg .= $publicPdfUrl . "\n\n";
+                    $msg .= "🔒 *PERHATIAN PENTING:*\n";
+                    $msg .= "Demi keamanan data gaji Anda, link di atas *hanya bisa dibuka & diunduh 1 (satu) kali*. Mohon segera simpan file PDF ke HP/perangkat Anda.\n\n";
+                    $msg .= "⚠️ Jika link sudah tidak aktif dan ingin download ulang, silakan melapor ke Superadmin di *masaditfb@gmail.com*.\n\n";
                     $msg .= "_Dibuat oleh: Kartika P. (Bendahara Yayasan)_\n";
                     $msg .= "_PAUD Arjuna Cendekia_";
 

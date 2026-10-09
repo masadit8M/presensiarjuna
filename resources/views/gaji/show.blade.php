@@ -44,6 +44,13 @@
                             Kirim Dokumen PDF via WA (Semua)
                         </button>
                     </form>
+                    <form action="/gaji/reset-link-semua/{{ $periode->id }}" method="POST" onsubmit="return confirm('Reset seluruh link slip gaji pada periode ini? Karyawan yang link-nya sudah nonaktif akan dapat mengunduh 1x lagi.')">
+                        @csrf
+                        <button type="submit" class="btn btn-outline-warning" title="Reset semua link slip gaji karyawan agar dapat diakses kembali untuk 1x unduh">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-rotate" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M19.95 11a8 8 0 1 0 -.5 4m.5 5v-5h-5" /></svg>
+                            Reset Semua Link Slip
+                        </button>
+                    </form>
                 </div>
             </div>
         </div>
@@ -88,9 +95,13 @@
                 <div class="card">
                     <div class="card-body">
                         <div class="d-flex align-items-center">
-                            <div class="subheader">Pengiriman WA</div>
+                            <div class="subheader">Status WA & Unduhan (1x)</div>
                         </div>
-                        <div class="h1 mb-0 text-primary">{{ $stats['total_wa_terkirim'] }} <span class="fs-4 text-muted">/ {{ $stats['total_karyawan'] }} Terkirim</span></div>
+                        <div class="h2 mb-0">
+                            <span class="text-primary">{{ $stats['total_wa_terkirim'] }} WA</span>
+                            <span class="text-muted fs-4"> &bull; </span>
+                            <span class="text-warning">{{ $stats['total_diunduh'] ?? 0 }} Unduh</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -161,8 +172,8 @@
                             <th style="min-width: 160px;">Tunjangan & Bonus</th>
                             <th style="min-width: 120px;">Potongan</th>
                             <th style="min-width: 150px;">Gaji Bersih (THP)</th>
-                            <th style="min-width: 110px;">Status WA</th>
-                            <th class="text-center" style="min-width: 220px;">Aksi</th>
+                            <th style="min-width: 130px;">Status WA & Link</th>
+                            <th class="text-center" style="min-width: 250px;">Aksi</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -206,11 +217,21 @@
                             </td>
                             <td>
                                 @if ($d->status_kirim_wa)
-                                    <span class="badge bg-success" title="{{ $d->waktu_kirim_wa }}">
-                                        Terkirim
+                                    <span class="badge bg-success mb-1" title="{{ $d->waktu_kirim_wa }}">
+                                        WA Terkirim
                                     </span>
                                 @else
-                                    <span class="badge bg-secondary-lt">Belum</span>
+                                    <span class="badge bg-secondary-lt mb-1">WA Belum</span>
+                                @endif
+                                <br>
+                                @if (!empty($d->download_count) && $d->download_count > 0)
+                                    <span class="badge bg-warning text-dark" title="Diunduh {{ $d->download_count }}x ({{ $d->download_at }})">
+                                        Sudah Diunduh (1x)
+                                    </span>
+                                @elseif ($d->status_kirim_wa)
+                                    <span class="badge bg-primary-lt" title="Link aktif siap diunduh 1x">
+                                        Link Aktif (1x)
+                                    </span>
                                 @endif
                             </td>
                             <td class="text-center text-nowrap">
@@ -229,6 +250,17 @@
                                     <a href="/gaji/download-pdf/{{ $d->id }}" class="btn btn-sm btn-outline-secondary" title="Download File PDF Resmi">
                                         PDF
                                     </a>
+
+                                    {{-- Reset Link 1x (Jika sudah pernah diunduh / lapor ingin download ulang) --}}
+                                    @if (!empty($d->download_count) && $d->download_count > 0)
+                                    <form action="/gaji/reset-link/{{ $d->id }}" method="POST" class="d-inline" onsubmit="return confirm('Reset link slip gaji {{ $d->nama_lengkap }}? Karyawan akan dapat mengunduh 1x lagi.')">
+                                        @csrf
+                                        <button type="submit" class="btn btn-sm btn-warning" title="Reset Link 1x (Karyawan lapor ingin download ulang)">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-refresh m-0" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></svg>
+                                            Reset
+                                        </button>
+                                    </form>
+                                    @endif
 
                                     {{-- Kirim Dokumen PDF via WhatsApp (wa.me) --}}
                                     <a href="/gaji/kirimwa/{{ $d->id }}" target="_blank" class="btn btn-sm btn-success" title="Kirim Slip Gaji via WhatsApp" onclick="return confirm('Buka WhatsApp untuk kirim Slip Gaji ke {{ $d->nama_lengkap }} ({{ $d->no_hp ?: 'nomor belum diisi' }})?')">

@@ -246,7 +246,9 @@ class KaryawanController extends Controller
                 $data['password'] = Hash::make($request->password);
             }
             $update = DB::table('karyawan')->where('nik', $nik)->update($data);
-            if ($update) {
+            // update() mengembalikan jumlah baris yang BERUBAH (0 jika data karyawan sama persis),
+            // sehingga jangan dipakai sebagai penanda gagal. Kegagalan sebenarnya ditangani lewat catch.
+            if ($update !== false) {
                 if ($request->hasFile('foto')) {
                     $folderPath = "public/uploads/karyawan/";
                     $folderPathOld = "public/uploads/karyawan/" . $old_foto;

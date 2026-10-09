@@ -65,7 +65,7 @@ class KonfigurasiController extends Controller
             'akhir_jam_istirahat' => $akhir_jam_istirahat,
             'jam_pulang' => $jam_pulang,
             'total_jam' => $total_jam,
-            'lintashari' => $lintashari
+            'lintashari' => 0
         ];
         try {
             DB::table('jam_kerja')->insert($data);
@@ -93,7 +93,7 @@ class KonfigurasiController extends Controller
         $akhir_jam_masuk = $request->akhir_jam_masuk;
         $jam_pulang = $request->jam_pulang;
         $total_jam = $request->total_jam;
-        $lintashari = $request->lintashari;
+        $lintashari = 0;
         $status_istirahat = $request->status_istirahat;
         $awal_jam_istirahat = $request->awal_jam_istirahat;
         $akhir_jam_istirahat = $request->akhir_jam_istirahat;
@@ -107,7 +107,7 @@ class KonfigurasiController extends Controller
             'akhir_jam_istirahat' => $akhir_jam_istirahat,
             'jam_pulang' => $jam_pulang,
             'total_jam' => $total_jam,
-            'lintashari' => $lintashari
+            'lintashari' => 0
         ];
         try {
             DB::table('jam_kerja')->where('kode_jam_kerja', $kode_jam_kerja)->update($data);

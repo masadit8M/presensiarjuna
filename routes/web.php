@@ -149,6 +149,8 @@ Route::group(['middleware' => ['role:administrator|admin departemen,user']], fun
     Route::get('/gaji/download-pdf/{id}', [GajiController::class, 'downloadPdf']);
     Route::match(['get', 'post'], '/gaji/kirimwa/{id}', [GajiController::class, 'kirimWa']);
     Route::post('/gaji/kirimwa-semua/{periode_id}', [GajiController::class, 'kirimWaSemua']);
+    Route::post('/gaji/reset-link/{id}', [GajiController::class, 'resetLink']);
+    Route::post('/gaji/reset-link-semua/{periode_id}', [GajiController::class, 'resetLinkSemua']);
     Route::get('/gaji/master/sync-excel', [GajiController::class, 'syncMasterExcel']);
     Route::get('/gaji/master', [GajiController::class, 'master']);
     Route::post('/gaji/master/{nik}/update', [GajiController::class, 'updateMaster']);

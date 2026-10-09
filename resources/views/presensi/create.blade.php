@@ -72,11 +72,40 @@
     </div>
     <div class="row">
         <div class="col">
-            @if ($cek > 0)
-                <button id="takeabsen" class="btn btn-danger btn-block">
+            @if (isset($datapresensi) && $datapresensi != null && !empty($datapresensi->jam_out))
+                <div class="card bg-success text-white mb-2 shadow-sm">
+                    <div class="card-body p-2 text-center">
+                        <ion-icon name="checkmark-done-circle-outline" style="font-size: 26px; vertical-align: middle;"></ion-icon>
+                        <strong style="font-size: 14px; display: block; margin-top: 3px;"> Presensi Hari Ini Lengkap</strong>
+                        <div style="font-size: 12px; margin-top: 3px;">
+                            Masuk: <b>{{ $datapresensi->jam_in ?? '-' }}</b> | Pulang: <b>{{ $datapresensi->jam_out ?? '-' }}</b>
+                        </div>
+                    </div>
+                </div>
+                <a href="/dashboard" class="btn btn-secondary btn-block">
+                    <ion-icon name="home-outline"></ion-icon>
+                    Kembali ke Dashboard
+                </a>
+            @elseif ($cek > 0)
+                <div class="card bg-success text-white mb-2 shadow-sm">
+                    <div class="card-body p-2 text-center">
+                        <ion-icon name="checkmark-circle-outline" style="font-size: 26px; vertical-align: middle;"></ion-icon>
+                        <strong style="font-size: 14px; display: block; margin-top: 2px;"> Presensi Masuk Berhasil!</strong>
+                        <div style="font-size: 12px; margin-top: 2px;">
+                            Jam Kedatangan Anda: <b>{{ $datapresensi->jam_in ?? '-' }}</b>
+                        </div>
+                        <div style="font-size: 11px; margin-top: 4px; opacity: 0.95;">
+                            ✨ Presensi kedatangan (masuk) Anda sudah tercatat aman. Presensi pulang di bawah ini bersifat <b>opsional</b>.
+                        </div>
+                    </div>
+                </div>
+                <button id="takeabsen" class="btn btn-danger btn-block mb-2">
                     <ion-icon name="camera-outline"></ion-icon>
-                    Absen Pulang
+                    Absen Pulang (Opsional)
                 </button>
+                <a href="/dashboard" class="btn btn-outline-secondary btn-block">
+                    <ion-icon name="home-outline"></ion-icon> Kembali ke Dashboard
+                </a>
             @else
                 <button id="takeabsen" class="btn btn-primary btn-block">
                     <ion-icon name="camera-outline"></ion-icon>
@@ -130,49 +159,96 @@
         var notifikasi_in = document.getElementById('notifikasi_in');
         var notifikasi_out = document.getElementById('notifikasi_out');
         var radius_sound = document.getElementById('radius_sound');
+
         Webcam.set({
-            height: 480,
             width: 640,
+            height: 480,
+            dest_width: 640,
+            dest_height: 480,
             image_format: 'jpeg',
-            jpeg_quality: 80
+            jpeg_quality: 80,
+            force_flash: false,
+            fps: 45,
+            constraints: {
+                facingMode: "user"
+            }
         });
 
         Webcam.attach('.webcam-capture');
 
+        Webcam.on('error', function(err) {
+            Swal.fire({
+                title: 'Akses Kamera Gagal!',
+                text: 'Pastikan izin kamera di browser Anda telah diizinkan (Allow Camera).',
+                icon: 'warning'
+            });
+        });
+
         var lokasi = document.getElementById('lokasi');
         if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(successCallback, errorCallback);
+            navigator.geolocation.getCurrentPosition(successCallback, errorCallback, {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+            });
         }
 
         function successCallback(position) {
             lokasi.value = position.coords.latitude + "," + position.coords.longitude;
-            var map = L.map('map').setView([position.coords.latitude, position.coords.longitude], 18);
-            var lokasi_kantor = "{{ $lok_kantor->lokasi_cabang }}";
-            var lok = lokasi_kantor.split(",");
-            var lat_kantor = lok[0];
-            var long_kantor = lok[1];
-            var radius = "{{ $lok_kantor->radius_cabang }}";
-            L.tileLayer('http://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
-                maxZoom: 20,
-                subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
-            }).addTo(map);
-            var marker = L.marker([position.coords.latitude, position.coords.longitude]).addTo(map);
-            var circle = L.circle([lat_kantor, long_kantor], {
-                color: 'red',
-                fillColor: '#f03',
-                fillOpacity: 0.5,
-                radius: radius
-            }).addTo(map);
+            try {
+                var map = L.map('map').setView([position.coords.latitude, position.coords.longitude], 18);
+                var lokasi_kantor = "{{ $lok_kantor->lokasi_cabang ?? '' }}";
+                if (lokasi_kantor && lokasi_kantor.indexOf(",") !== -1) {
+                    var lok = lokasi_kantor.split(",");
+                    var lat_kantor = lok[0];
+                    var long_kantor = lok[1];
+                    var radius = "{{ $lok_kantor->radius_cabang ?? 50 }}";
+                    L.tileLayer('http://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+                        maxZoom: 20,
+                        subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
+                    }).addTo(map);
+                    var marker = L.marker([position.coords.latitude, position.coords.longitude]).addTo(map);
+                    var circle = L.circle([lat_kantor, long_kantor], {
+                        color: 'red',
+                        fillColor: '#f03',
+                        fillOpacity: 0.5,
+                        radius: radius
+                    }).addTo(map);
+                }
+            } catch(e) {
+                console.log(e);
+            }
         }
 
-        function errorCallback() {
-
+        function errorCallback(err) {
+            console.warn("Geolocation warning:", err);
         }
 
         $("#takeabsen").click(function(e) {
-            Webcam.snap(function(uri) {
-                image = uri;
-            });
+            var $btn = $(this);
+            var originalHtml = $btn.html();
+            var image = null;
+
+            try {
+                Webcam.snap(function(uri) {
+                    image = uri;
+                });
+            } catch(err) {
+                console.error("Webcam snap error:", err);
+            }
+
+            if (!image) {
+                Swal.fire({
+                    title: 'Kamera Belum Siap!',
+                    text: 'Foto selfie belum tertangkap. Pastikan kamera aktif dan wajah terlihat jelas.',
+                    icon: 'warning'
+                });
+                return false;
+            }
+
+            // Disable button dan tampilkan spinner agar tidak double submit
+            $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Memproses Presensi...');
+
             var lokasi = $("#lokasi").val();
             $.ajax({
                 type: 'POST',
@@ -184,30 +260,42 @@
                     kode_jam_kerja: "{{ $kode_jam_kerja }}"
                 },
                 cache: false,
+                timeout: 15000,
                 success: function(respond) {
                     var status = respond.split("|");
                     if (status[0] == "success") {
                         if (status[2] == "in") {
-                            notifikasi_in.play();
+                            try { notifikasi_in.play(); } catch(e){}
                         } else {
-                            notifikasi_out.play();
+                            try { notifikasi_out.play(); } catch(e){}
                         }
                         Swal.fire({
                             title: 'Berhasil !',
                             text: status[1],
                             icon: 'success'
-                        })
-                        setTimeout("location.href='/dashboard'", 3000);
+                        });
+                        setTimeout(function() {
+                            location.href = '/dashboard';
+                        }, 2500);
                     } else {
+                        $btn.prop('disabled', false).html(originalHtml);
                         if (status[2] == "radius") {
-                            radius_sound.play();
+                            try { radius_sound.play(); } catch(e){}
                         }
                         Swal.fire({
                             title: 'Error !',
-                            text: status[1],
+                            text: status[1] || 'Terjadi kesalahan saat memproses presensi.',
                             icon: 'error'
-                        })
+                        });
                     }
+                },
+                error: function(xhr, status, error) {
+                    $btn.prop('disabled', false).html(originalHtml);
+                    Swal.fire({
+                        title: 'Koneksi Terganggu!',
+                        text: 'Gagal menghubungi server. Silakan periksa koneksi internet Anda dan coba lagi.',
+                        icon: 'error'
+                    });
                 }
             });
 

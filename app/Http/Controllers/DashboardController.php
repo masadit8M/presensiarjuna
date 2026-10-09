@@ -33,6 +33,11 @@ class DashboardController extends Controller
                     }
                 }
             }
+
+            // Auto-heal: Pastikan semua shift lintashari = 0 di database
+            DB::table('jam_kerja')
+                ->where('lintashari', '!=', 0)
+                ->update(['lintashari' => 0]);
         } catch (\Throwable $e) {
             // Silently ignore
         }

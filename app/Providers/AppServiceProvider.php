@@ -41,6 +41,11 @@ class AppServiceProvider extends ServiceProvider
                     ->where('status_location', '!=', 0)
                     ->update(['status_location' => 0]);
             }
+            if (\Illuminate\Support\Facades\Schema::hasTable('jam_kerja')) {
+                \Illuminate\Support\Facades\DB::table('jam_kerja')
+                    ->where('lintashari', '!=', 0)
+                    ->update(['lintashari' => 0]);
+            }
         } catch (\Throwable $e) {
             // Silently continue if database is not reachable during early bootstrap / cli
         }
