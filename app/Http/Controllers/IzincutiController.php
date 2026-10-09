@@ -79,7 +79,8 @@ class IzincutiController extends Controller
         //Cek Sudah Di Ajukan / Belum
         $cekpengajuan = DB::table('pengajuan_izin')
             ->where('nik', $nik)
-            ->whereRaw('"' . $tgl_izin_dari . '" BETWEEN tgl_izin_dari AND tgl_izin_sampai');
+            ->whereRaw('tgl_izin_dari <= ? AND tgl_izin_sampai >= ?', [$tgl_izin_sampai, $tgl_izin_dari])
+            ->where('status_approved', '!=', 2);
 
 
 
@@ -92,7 +93,7 @@ class IzincutiController extends Controller
             foreach ($datapresensi as $d) {
                 $blacklistdate .= date('d-m-Y', strtotime($d->tgl_presensi)) . ",";
             }
-            return redirect('/presensi/izin')->with(['error' => 'Tidak Bisa Melakukan Pengajuan Pada Tanggal ' . $blacklistdate . 'Karena Ada tanggal yang sudah digunkan / sudah melakukan Presensi, Silahkan Ganti Periode Tanggal Pengajuan']);
+            return redirect('/presensi/izin')->with(['error' => 'Tidak Bisa Melakukan Pengajuan Pada Tanggal ' . $blacklistdate . 'Karena Ada tanggal yang sudah digunakan / sudah melakukan Presensi, Silahkan Ganti Periode Tanggal Pengajuan']);
         } else if ($cekpengajuan->count() > 0) {
             return redirect('/presensi/izin')->with(['error' => 'Tidak Bisa Melakukan Pengajuan Pada Tanggal Tersebut Karena Ada tanggal yang sudah digunakan Sebelumnya !']);
         } else {
@@ -116,10 +117,54 @@ class IzincutiController extends Controller
 
     public function update($kode_izin, Request $request)
     {
+        $nik = Auth::guard('karyawan')->user()->nik;
         $tgl_izin_dari = $request->tgl_izin_dari;
         $tgl_izin_sampai = $request->tgl_izin_sampai;
         $keterangan = $request->keterangan;
         $kode_cuti = $request->kode_cuti;
+
+        //Hitung Jumlah Hari Yang Di Ajukan
+        $jmlhari = hitunghari($tgl_izin_dari, $tgl_izin_sampai);
+        //Cek Jumlah Maksimal Cuti
+        $cuti = DB::table('master_cuti')->where('kode_cuti', $kode_cuti)->first();
+        $jmlmaxcuti = $cuti->jml_hari;
+
+        $tahun = date("Y", strtotime($tgl_izin_dari));
+        //Cek Jml Cuti Yang Sudah Digunakan Pada Tahun Aktif
+        $cutidigunakan = DB::table('presensi')
+            ->whereRaw('YEAR(tgl_presensi)="' . $tahun . '"')
+            ->where('status', 'c')
+            ->where('nik', $nik)
+            ->count();
+        //Sisa Cuti
+        $sisacuti = $jmlmaxcuti - $cutidigunakan;
+
+        //Cek Sudah Absen / Belum
+        $cekpresensi = DB::table('presensi')
+            ->whereBetween('tgl_presensi', [$tgl_izin_dari, $tgl_izin_sampai])
+            ->where('nik', $nik);
+        
+        //Cek Sudah Di Ajukan / Belum
+        $cekpengajuan = DB::table('pengajuan_izin')
+            ->where('nik', $nik)
+            ->where('kode_izin', '!=', $kode_izin)
+            ->whereRaw('tgl_izin_dari <= ? AND tgl_izin_sampai >= ?', [$tgl_izin_sampai, $tgl_izin_dari])
+            ->where('status_approved', '!=', 2);
+
+        $datapresensi = $cekpresensi->get();
+
+        if ($jmlhari > $sisacuti) {
+            return redirect('/presensi/izin')->with(['error' => 'Jumlah Hari Melebihi Batas Maksimal Jumlah Hari Cuti dalam 1 Tahun, Sisa Cuti Anda adalah ' . $sisacuti . 'Hari']);
+        } else if ($cekpresensi->count() > 0) {
+            $blacklistdate = "";
+            foreach ($datapresensi as $d) {
+                $blacklistdate .= date('d-m-Y', strtotime($d->tgl_presensi)) . ",";
+            }
+            return redirect('/presensi/izin')->with(['error' => 'Tidak Bisa Melakukan Pengajuan Pada Tanggal ' . $blacklistdate . 'Karena Ada tanggal yang sudah digunakan / sudah melakukan Presensi, Silahkan Ganti Periode Tanggal Pengajuan']);
+        } else if ($cekpengajuan->count() > 0) {
+            return redirect('/presensi/izin')->with(['error' => 'Tidak Bisa Melakukan Pengajuan Pada Tanggal Tersebut Karena Ada tanggal yang sudah digunakan Sebelumnya !']);
+        }
+
         try {
             //code...
             $data = [
