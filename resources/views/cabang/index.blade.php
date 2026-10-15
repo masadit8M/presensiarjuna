@@ -52,8 +52,15 @@
                                 <form action="/cabang" method="GET">
                                     <div class="row">
                                         <div class="col-10">
-                                            <select name="kode_cabang" class="form-select" id="">
+                                            <select name="kode_cabang" class="form-select" id="kode_cabang">
                                                 <option value="">Semua Cabang</option>
+                                                @if (isset($all_cabang))
+                                                    @foreach ($all_cabang as $c)
+                                                        <option value="{{ $c->kode_cabang }}" {{ Request('kode_cabang') == $c->kode_cabang ? 'selected' : '' }}>
+                                                            {{ strtoupper($c->nama_cabang) }}
+                                                        </option>
+                                                    @endforeach
+                                                @endif
                                             </select>
                                         </div>
                                         <div class="col-2">

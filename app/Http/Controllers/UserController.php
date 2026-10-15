@@ -19,7 +19,10 @@ class UserController extends Controller
         $query->join('model_has_roles', 'users.id', '=', 'model_has_roles.model_id');
         $query->join('roles', 'model_has_roles.role_id', '=', 'roles.id');
         if (!empty($request->name)) {
-            $query->where('users.name', 'like', '%' . $request->name . '%');
+            $query->where(function ($q) use ($request) {
+                $q->where('users.name', 'like', '%' . $request->name . '%')
+                  ->orWhere('users.email', 'like', '%' . $request->name . '%');
+            });
         }
         $users = $query->paginate(10);
         $users->appends(request()->all());

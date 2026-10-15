@@ -41,6 +41,57 @@ Route::get('/slip-gaji/dokumen/{id}/{token}', [GajiController::class, 'viewPubli
 Route::get('/slip-gaji/download/{id}/{token}', [GajiController::class, 'downloadPublicSlip']);
 Route::get('/uploads/slip/{filename}', [GajiController::class, 'serveSlipFile']);
 
+// Route untuk menyajikan file storage publik (foto selfie presensi, avatar karyawan, surat izin sakit)
+// Memastikan foto selfie dan dokumen tetap muncul di panel dashboard meskipun symlink storage webserver tidak aktif
+Route::get('/storage/{path}', function ($path) {
+    $candidates = [
+        storage_path('app/public/' . $path),
+        public_path('storage/' . $path),
+        public_path($path),
+        storage_path('app/' . $path),
+        base_path('public_html/storage/' . $path),
+        base_path('public_html/' . $path),
+    ];
+
+    foreach ($candidates as $candidate) {
+        if (file_exists($candidate) && is_file($candidate)) {
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mime = finfo_file($finfo, $candidate) ?: 'application/octet-stream';
+            finfo_close($finfo);
+            return response()->file($candidate, [
+                'Content-Type' => $mime,
+                'Cache-Control' => 'public, max-age=86400',
+            ]);
+        }
+    }
+
+    abort(404);
+})->where('path', '.*');
+
+Route::get('/uploads/absensi/{filename}', function ($filename) {
+    $candidates = [
+        storage_path('app/public/uploads/absensi/' . $filename),
+        public_path('storage/uploads/absensi/' . $filename),
+        public_path('uploads/absensi/' . $filename),
+        base_path('public_html/storage/uploads/absensi/' . $filename),
+        base_path('public_html/uploads/absensi/' . $filename),
+    ];
+
+    foreach ($candidates as $candidate) {
+        if (file_exists($candidate) && is_file($candidate)) {
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mime = finfo_file($finfo, $candidate) ?: 'application/octet-stream';
+            finfo_close($finfo);
+            return response()->file($candidate, [
+                'Content-Type' => $mime,
+                'Cache-Control' => 'public, max-age=86400',
+            ]);
+        }
+    }
+
+    abort(404);
+});
+
 Route::middleware(['guest:karyawan'])->group(function () {
     Route::get('/', function () {
         return view('auth.login');

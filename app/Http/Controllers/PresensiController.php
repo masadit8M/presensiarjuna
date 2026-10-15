@@ -356,7 +356,7 @@ class PresensiController extends Controller
             $update = DB::table('presensi')->where('tgl_presensi', $tgl_presensi)->where('nik', $nik)->update($data_pulang);
             if ($update) {
                 echo "success|Terimakasih, Hati Hati Di Jalan|out";
-                Storage::put($file, $image_base64);
+                $this->saveAbsensiPhoto($fileName, $image_base64);
 
                 $gatewayUrl = env('WA_GATEWAY_URL');
                 if (!empty($gatewayUrl) && !str_contains($gatewayUrl, 'pedasalami.com')) {
@@ -396,7 +396,7 @@ class PresensiController extends Controller
             $simpan = DB::table('presensi')->insert($data);
             if ($simpan) {
                 echo "success|Terimkasih, Selamat Bekerja|in";
-                Storage::put($file, $image_base64);
+                $this->saveAbsensiPhoto($fileName, $image_base64);
 
                 $gatewayUrl = env('WA_GATEWAY_URL');
                 if (!empty($gatewayUrl) && !str_contains($gatewayUrl, 'pedasalami.com')) {
@@ -420,6 +420,37 @@ class PresensiController extends Controller
             } else {
                 echo "error|Maaf Gagal Absen Masuk, Hubungi Tim IT|in";
             }
+        }
+    }
+
+    /**
+     * Simpan file foto selfie ke berbagai path (storage dan public) agar selalu dapat diakses oleh webserver dan panel admin
+     */
+    private function saveAbsensiPhoto($fileName, $image_base64)
+    {
+        // 1. Simpan ke Laravel default Storage (storage/app/public/uploads/absensi/)
+        try {
+            Storage::put("public/uploads/absensi/" . $fileName, $image_base64);
+        } catch (\Throwable $e) {}
+
+        // 2. Simpan langsung ke folder-folder publik agar webserver (Apache/Nginx/LiteSpeed) bisa langsung menyajikan file static
+        $destinations = [
+            storage_path('app/public/uploads/absensi'),
+            public_path('storage/uploads/absensi'),
+            public_path('uploads/absensi'),
+            base_path('public_html/storage/uploads/absensi'),
+            base_path('public_html/uploads/absensi'),
+        ];
+
+        foreach ($destinations as $dir) {
+            try {
+                if (!file_exists($dir)) {
+                    @mkdir($dir, 0777, true);
+                }
+                if (is_dir($dir)) {
+                    @file_put_contents($dir . DIRECTORY_SEPARATOR . $fileName, $image_base64);
+                }
+            } catch (\Throwable $e) {}
         }
     }
 
@@ -609,6 +640,13 @@ class PresensiController extends Controller
 
         if (!empty($request->kode_dept)) {
             $query->where('karyawan.kode_dept', $request->kode_dept);
+        }
+
+        if (!empty($request->nama_karyawan)) {
+            $query->where(function ($q) use ($request) {
+                $q->where('karyawan.nama_lengkap', 'like', '%' . $request->nama_karyawan . '%')
+                  ->orWhere('karyawan.nik', 'like', '%' . $request->nama_karyawan . '%');
+            });
         }
 
         if ($user->hasRole('admin departemen')) {

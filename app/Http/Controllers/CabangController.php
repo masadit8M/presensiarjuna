@@ -8,10 +8,18 @@ use Illuminate\Support\Facades\Redirect;
 
 class CabangController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $cabang = DB::table('cabang')->orderBy('kode_cabang')->get();
-        return view('cabang.index', compact('cabang'));
+        $all_cabang = DB::table('cabang')->orderBy('nama_cabang')->get();
+        $query = DB::table('cabang')->orderBy('kode_cabang');
+        if (!empty($request->kode_cabang)) {
+            $query->where('kode_cabang', $request->kode_cabang);
+        }
+        if (!empty($request->nama_cabang)) {
+            $query->where('nama_cabang', 'like', '%' . $request->nama_cabang . '%');
+        }
+        $cabang = $query->get();
+        return view('cabang.index', compact('cabang', 'all_cabang'));
     }
 
 

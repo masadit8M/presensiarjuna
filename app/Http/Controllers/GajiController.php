@@ -897,7 +897,10 @@ class GajiController extends Controller
         }
 
         if ($request->nama_karyawan) {
-            $query->where('karyawan.nama_lengkap', 'like', '%' . $request->nama_karyawan . '%');
+            $query->where(function ($q) use ($request) {
+                $q->where('karyawan.nama_lengkap', 'like', '%' . $request->nama_karyawan . '%')
+                  ->orWhere('penggajian_detail.nik', 'like', '%' . $request->nama_karyawan . '%');
+            });
         }
 
         $details = $query->get();
@@ -1951,9 +1954,20 @@ class GajiController extends Controller
                 continue;
             }
 
-            // Filter search nama_karyawan
-            if ($request->nama_karyawan && stripos($item->nama_lengkap, $request->nama_karyawan) === false) {
-                continue;
+            // Filter search nama_karyawan / NIK
+            if ($request->nama_karyawan) {
+                $searchKey = trim($request->nama_karyawan);
+                $matchName = (stripos($item->nama_lengkap ?? '', $searchKey) !== false);
+                $matchNik = false;
+                foreach ($allNiks as $oneNik) {
+                    if (stripos($oneNik, $searchKey) !== false) {
+                        $matchNik = true;
+                        break;
+                    }
+                }
+                if (!$matchName && !$matchNik) {
+                    continue;
+                }
             }
 
             $filteredList->push($item);

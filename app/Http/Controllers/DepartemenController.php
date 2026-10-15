@@ -15,7 +15,10 @@ class DepartemenController extends Controller
         $query = Departemen::query();
         $query->select('*');
         if (!empty($nama_dept)) {
-            $query->where('nama_dept', 'like', '%' . $nama_dept . '%');
+            $query->where(function ($q) use ($nama_dept) {
+                $q->where('nama_dept', 'like', '%' . $nama_dept . '%')
+                  ->orWhere('kode_dept', 'like', '%' . $nama_dept . '%');
+            });
         }
         $departemen = $query->get();
         // $departemen = DB::table('departemen')->orderBy('kode_dept')->get();

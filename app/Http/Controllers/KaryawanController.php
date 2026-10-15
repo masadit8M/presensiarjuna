@@ -46,7 +46,10 @@ class KaryawanController extends Controller
         $query->join('departemen', 'karyawan.kode_dept', '=', 'departemen.kode_dept');
         $query->orderBy('nama_lengkap');
         if (!empty($request->nama_karyawan)) {
-            $query->where('nama_lengkap', 'like', '%' . $request->nama_karyawan . '%');
+            $query->where(function ($q) use ($request) {
+                $q->where('nama_lengkap', 'like', '%' . $request->nama_karyawan . '%')
+                  ->orWhere('karyawan.nik', 'like', '%' . $request->nama_karyawan . '%');
+            });
         }
 
         if (!empty($request->kode_dept)) {
@@ -62,6 +65,7 @@ class KaryawanController extends Controller
             $query->where('karyawan.kode_cabang', $kode_cabang);
         }
         $karyawan = $query->paginate(10);
+        $karyawan->appends($request->all());
 
         $departemen = DB::table('departemen')->get();
         $cabang = DB::table('cabang')->orderBy('kode_cabang')->get();

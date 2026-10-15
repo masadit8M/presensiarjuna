@@ -32,7 +32,7 @@ function selisih($jam_masuk, $jam_keluar)
             <td>{{ $d->jam_in }}</td>
             <td>
                 @if ($d->foto_in != null)
-                    <img src="{{ url($foto_in) }}" class="avatar" alt="">
+                    <img src="{{ url($foto_in) }}" class="avatar" alt="" onerror="this.onerror=null; this.src='{{ asset('assets/img/nophoto.png') }}';">
                 @else
                     <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-photo-cancel"
                         width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
@@ -50,7 +50,7 @@ function selisih($jam_masuk, $jam_keluar)
             <td>{!! $d->jam_out != null ? $d->jam_out : '<span class="badge bg-danger">Belum Absen</span>' !!}</td>
             <td>
                 @if ($d->foto_out != null)
-                    <img src="{{ url($foto_out) }}" class="avatar" alt="">
+                    <img src="{{ url($foto_out) }}" class="avatar" alt="" onerror="this.onerror=null; this.src='{{ asset('assets/img/nophoto.png') }}';">
                 @else
                     <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-photo-cancel"
                         width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
