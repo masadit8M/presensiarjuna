@@ -50,6 +50,17 @@
             height: 12px;
         }
 
+        .preview-foto {
+            cursor: pointer !important;
+            transition: transform 0.15s ease-in-out, box-shadow 0.15s ease-in-out !important;
+        }
+        .preview-foto:hover {
+            transform: scale(1.18) !important;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+            z-index: 5 !important;
+            position: relative;
+        }
+
     </style>
 </head>
 <body>
@@ -159,6 +170,109 @@
             });
         });
         observer.observe(document.body, { childList: true, subtree: true });
+    });
+    </script>
+
+    <!-- Modal Preview Foto Selfie / Profil -->
+    <div class="modal modal-blur fade" id="modal-previewfoto" tabindex="-1" role="dialog" aria-hidden="true" style="z-index: 1060;">
+        <div class="modal-dialog modal-dialog-centered" role="document" style="max-width: 520px;">
+            <div class="modal-content shadow-lg border-0">
+                <div class="modal-header py-2" style="background-color: #206bc4; color: #fff;">
+                    <div>
+                        <h5 class="modal-title text-white mb-0" id="previewfoto-nama">Preview Foto Selfie</h5>
+                        <small class="text-white-50" id="previewfoto-sub">Detail Presensi Karyawan</small>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" data-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-2 text-center" style="background-color: #0f172a; min-height: 320px; display: flex; align-items: center; justify-content: center;">
+                    <img id="previewfoto-img" src="" alt="Foto Selfie Presensi" class="img-fluid rounded" style="max-height: 65vh; max-width: 100%; object-fit: contain; box-shadow: 0 4px 16px rgba(0,0,0,0.5);">
+                </div>
+                <div class="modal-footer py-2 d-flex justify-content-between align-items-center bg-light">
+                    <div class="d-flex align-items-center gap-1 flex-wrap">
+                        <span class="badge bg-primary text-white" id="previewfoto-badge-tipe">Presensi</span>
+                        <span class="badge bg-secondary text-white" id="previewfoto-badge-jam">Jam</span>
+                        <span class="badge bg-azure text-white" id="previewfoto-badge-cabang">Cabang</span>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <a id="previewfoto-link" href="#" target="_blank" class="btn btn-outline-primary btn-sm">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-zoom-in" width="18" height="18" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                                <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" />
+                                <path d="M7 10l6 0" />
+                                <path d="M10 7l0 6" />
+                                <path d="M21 21l-6 -6" />
+                            </svg>
+                            Resolusi Penuh
+                        </a>
+                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal" data-dismiss="modal">Tutup</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    $(document).ready(function() {
+        $(document).on('click', '.preview-foto', function(e) {
+            e.preventDefault();
+            var fotoUrl = $(this).attr('data-foto') || $(this).attr('src');
+            var nama = $(this).attr('data-nama') || 'Foto Karyawan';
+            var nik = $(this).attr('data-nik') || '';
+            var tipe = $(this).attr('data-tipe') || 'Foto Selfie';
+            var jam = $(this).attr('data-jam') || '';
+            var tgl = $(this).attr('data-tgl') || '';
+            var cabang = $(this).attr('data-cabang') || '';
+            var dept = $(this).attr('data-dept') || '';
+            var status = $(this).attr('data-status') || '';
+
+            $('#previewfoto-nama').text(nama + (nik ? ' (' + nik + ')' : ''));
+
+            var subDetails = [];
+            if (tipe) subDetails.push(tipe);
+            if (tgl) subDetails.push(tgl);
+            if (jam) subDetails.push('Pukul ' + jam);
+            if (status) subDetails.push(status);
+            $('#previewfoto-sub').text(subDetails.join(' • '));
+
+            $('#previewfoto-badge-tipe').text(tipe || 'Foto');
+            if (jam) {
+                $('#previewfoto-badge-jam').text(jam).show();
+            } else {
+                $('#previewfoto-badge-jam').hide();
+            }
+            if (cabang) {
+                $('#previewfoto-badge-cabang').text(cabang).show();
+            } else {
+                $('#previewfoto-badge-cabang').hide();
+            }
+
+            $('#previewfoto-img').attr('src', fotoUrl);
+            $('#previewfoto-link').attr('href', fotoUrl);
+
+            // Buka modal secara aman untuk Bootstrap 5 & 3
+            if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                try {
+                    var modalEl = document.getElementById('modal-previewfoto');
+                    var myModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                    myModal.show();
+                } catch (err) {
+                    $('#modal-previewfoto').modal('show');
+                }
+            } else if ($.fn.modal) {
+                $('#modal-previewfoto').modal('show');
+            }
+        });
+
+        $(document).on('click', '#modal-previewfoto [data-bs-dismiss="modal"], #modal-previewfoto [data-dismiss="modal"]', function() {
+            if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                try {
+                    var modalEl = document.getElementById('modal-previewfoto');
+                    var inst = bootstrap.Modal.getInstance(modalEl);
+                    if (inst) inst.hide();
+                } catch (e) {}
+            }
+            $('#modal-previewfoto').modal('hide');
+        });
     });
     </script>
 </body>

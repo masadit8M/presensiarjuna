@@ -191,7 +191,16 @@
                                                             <img src="{{ asset('assets/img/nophoto.png') }}"
                                                                 class="avatar" alt="">
                                                         @else
-                                                            <img src="{{ url($path) }}" class="avatar"
+                                                            <img src="{{ url($path) }}" class="avatar preview-foto"
+                                                                style="cursor: pointer;"
+                                                                title="Klik untuk memperbesar foto karyawan"
+                                                                data-foto="{{ url($path) }}"
+                                                                data-nama="{{ $d->nama_lengkap }}"
+                                                                data-nik="{{ $d->nik }}"
+                                                                data-dept="{{ $d->nama_dept }}"
+                                                                data-cabang="{{ $d->kode_cabang }}"
+                                                                data-tipe="Foto Profil Karyawan"
+                                                                onerror="this.onerror=null; this.src='{{ asset('assets/img/nophoto.png') }}';"
                                                                 alt="">
                                                         @endif
 

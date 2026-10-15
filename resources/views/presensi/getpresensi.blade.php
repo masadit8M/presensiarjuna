@@ -32,7 +32,18 @@ function selisih($jam_masuk, $jam_keluar)
             <td>{{ $d->jam_in }}</td>
             <td>
                 @if ($d->foto_in != null)
-                    <img src="{{ url($foto_in) }}" class="avatar" alt="" onerror="this.onerror=null; this.src='{{ asset('assets/img/nophoto.png') }}';">
+                    <img src="{{ url($foto_in) }}" class="avatar preview-foto" alt="Foto Masuk" 
+                        title="Klik untuk memperbesar foto selfie masuk"
+                        data-foto="{{ url($foto_in) }}"
+                        data-nama="{{ $d->nama_lengkap }}"
+                        data-nik="{{ $d->nik }}"
+                        data-cabang="{{ $d->kode_cabang }}"
+                        data-dept="{{ $d->kode_dept }}"
+                        data-tipe="Foto Masuk"
+                        data-jam="{{ $d->jam_in }}"
+                        data-tgl="{{ !empty($tanggal) ? date('d-m-Y', strtotime($tanggal)) : '' }}"
+                        data-status="{{ $d->jam_in >= $d->jam_masuk ? 'Terlambat' : 'Tepat Waktu' }}"
+                        onerror="this.onerror=null; this.src='{{ asset('assets/img/nophoto.png') }}';">
                 @else
                     <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-photo-cancel"
                         width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
@@ -50,7 +61,18 @@ function selisih($jam_masuk, $jam_keluar)
             <td>{!! $d->jam_out != null ? $d->jam_out : '<span class="badge bg-danger">Belum Absen</span>' !!}</td>
             <td>
                 @if ($d->foto_out != null)
-                    <img src="{{ url($foto_out) }}" class="avatar" alt="" onerror="this.onerror=null; this.src='{{ asset('assets/img/nophoto.png') }}';">
+                    <img src="{{ url($foto_out) }}" class="avatar preview-foto" alt="Foto Pulang" 
+                        title="Klik untuk memperbesar foto selfie pulang"
+                        data-foto="{{ url($foto_out) }}"
+                        data-nama="{{ $d->nama_lengkap }}"
+                        data-nik="{{ $d->nik }}"
+                        data-cabang="{{ $d->kode_cabang }}"
+                        data-dept="{{ $d->kode_dept }}"
+                        data-tipe="Foto Pulang"
+                        data-jam="{{ $d->jam_out }}"
+                        data-tgl="{{ !empty($tanggal) ? date('d-m-Y', strtotime($tanggal)) : '' }}"
+                        data-status="Pulang"
+                        onerror="this.onerror=null; this.src='{{ asset('assets/img/nophoto.png') }}';">
                 @else
                     <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-photo-cancel"
                         width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
@@ -64,7 +86,6 @@ function selisih($jam_masuk, $jam_keluar)
                         <path d="M17 21l4 -4" />
                     </svg>
                 @endif
-
             </td>
             <td>{{ $d->status }}</td>
             <td>
