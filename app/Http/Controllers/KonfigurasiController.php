@@ -21,14 +21,13 @@ class KonfigurasiController extends Controller
         $lokasi_kantor = $request->lokasi_kantor;
         $radius = $request->radius;
 
-        $update = DB::table('konfigurasi_lokasi')->where('id', 1)->update([
-            'lokasi_kantor' => $lokasi_kantor,
-            'radius' => $radius
-        ]);
-
-        if ($update) {
+        try {
+            DB::table('konfigurasi_lokasi')->where('id', 1)->update([
+                'lokasi_kantor' => $lokasi_kantor,
+                'radius' => $radius
+            ]);
             return Redirect::back()->with(['success' => 'Data Berhasil Diupdate']);
-        } else {
+        } catch (\Exception $e) {
             return Redirect::back()->with(['warning' => 'Data Gagal Diupdate']);
         }
     }
@@ -53,7 +52,6 @@ class KonfigurasiController extends Controller
         $total_jam = $request->total_jam;
         $lintashari = $request->lintashari;
 
-        //dd($lintashari);
         $data = [
             'kode_jam_kerja' => $kode_jam_kerja,
             'nama_jam_kerja' => $nama_jam_kerja,
@@ -71,7 +69,6 @@ class KonfigurasiController extends Controller
             DB::table('jam_kerja')->insert($data);
             return Redirect::back()->with(['success' => 'Data Berhasil Disimpan']);
         } catch (\Exception $e) {
-            dd($e);
             return Redirect::back()->with(['warning' => 'Data Gagal Disimpan']);
         }
     }
@@ -113,7 +110,6 @@ class KonfigurasiController extends Controller
             DB::table('jam_kerja')->where('kode_jam_kerja', $kode_jam_kerja)->update($data);
             return Redirect::back()->with(['success' => 'Data Berhasil Diupdate']);
         } catch (\Exception $e) {
-            dd($e);
             return Redirect::back()->with(['warning' => 'Data Gagal Diupdate']);
         }
     }

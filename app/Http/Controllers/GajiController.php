@@ -314,26 +314,77 @@ class GajiController extends Controller
             return redirect('/gaji')->with(['warning' => 'Periode tidak ditemukan']);
         }
 
-        // Delete previous details for this period
-        DB::table('penggajian_detail')->where('periode_id', $id)->delete();
-
-        // Re-generate using unified single-person logic
+        // Re-generate & consolidate (1 slip per nama) while preserving custom slip adjustments
         $totalGenerated = $this->generateDetailsForPeriod(
             $id,
             $periode->tgl_mulai,
             $periode->tgl_selesai,
             $periode->hk_standar,
-            $periode->total_siswa_tpa
+            $periode->total_siswa_tpa,
+            true
         );
 
-        return redirect('/gaji/periode/' . $id)->with(['success' => 'Presensi dan slip gaji berhasil dihitung ulang dan dikonsolidasikan (1 slip per nama) untuk ' . $totalGenerated . ' karyawan!']);
+        return redirect('/gaji/periode/' . $id)->with(['success' => 'Presensi dan slip gaji berhasil dihitung ulang dan dikonsolidasikan (1 slip per nama) untuk ' . $totalGenerated . ' karyawan tanpa menghapus bonus/catatan manual!']);
+    }
+
+    /**
+     * Automatic real-time synchronization from Presensi to active Payroll periods covering $tanggal.
+     */
+    public static function syncAttendanceByDate($tanggal = null)
+    {
+        $tgl = $tanggal ?: date('Y-m-d');
+        $activePeriods = DB::table('penggajian_periode')
+            ->where('status', '!=', 'terbayar')
+            ->where('tgl_mulai', '<=', $tgl)
+            ->where('tgl_selesai', '>=', $tgl)
+            ->get();
+
+        if ($activePeriods->isEmpty()) {
+            $bulan = (int) date('n', strtotime($tgl));
+            $tahun = (int) date('Y', strtotime($tgl));
+            $activePeriods = DB::table('penggajian_periode')
+                ->where('status', '!=', 'terbayar')
+                ->where('bulan', $bulan)
+                ->where('tahun', $tahun)
+                ->get();
+        }
+
+        $instance = new self();
+        foreach ($activePeriods as $p) {
+            $instance->generateDetailsForPeriod(
+                $p->id,
+                $p->tgl_mulai,
+                $p->tgl_selesai,
+                $p->hk_standar > 0 ? $p->hk_standar : 26,
+                $p->total_siswa_tpa ?? 0,
+                true
+            );
+        }
     }
 
     /**
      * Generate payroll details for a period with multi-branch / multi-NIK consolidation per person.
      */
-    private function generateDetailsForPeriod($periodeId, $tglMulai, $tglSelesai, $hkStandar = 26, $totalSiswaTpa = 0)
+    public function generateDetailsForPeriod($periodeId, $tglMulai, $tglSelesai, $hkStandar = 26, $totalSiswaTpa = 0, $preserveManualAdjustments = true)
     {
+        $existingMapByName = [];
+        $existingMapByNik = [];
+        if ($preserveManualAdjustments) {
+            $existingRows = DB::table('penggajian_detail')
+                ->leftJoin('karyawan', 'penggajian_detail.nik', '=', 'karyawan.nik')
+                ->where('penggajian_detail.periode_id', $periodeId)
+                ->select('penggajian_detail.*', 'karyawan.nama_lengkap')
+                ->get();
+
+            foreach ($existingRows as $er) {
+                $existingMapByNik[$er->nik] = $er;
+                $nName = trim(strtoupper($er->nama_lengkap ?? ''));
+                if (!empty($nName) && !isset($existingMapByName[$nName])) {
+                    $existingMapByName[$nName] = $er;
+                }
+            }
+        }
+
         // Pull active karyawan and group by normalized nama_lengkap
         $allKaryawan = DB::table('karyawan')->orderBy('nama_lengkap', 'asc')->get();
 
@@ -356,200 +407,258 @@ class GajiController extends Controller
             }
         }
 
-        $totalGenerated = 0;
+        $jamKerjaMap = DB::table('jam_kerja')->get()->keyBy('kode_jam_kerja');
+        $liburSpesifikRows = DB::table('harilibur_detail')
+            ->join('harilibur', 'harilibur_detail.kode_libur', '=', 'harilibur.kode_libur')
+            ->whereBetween('harilibur.tanggal_libur', [$tglMulai, $tglSelesai])
+            ->select('harilibur_detail.nik', 'harilibur.tanggal_libur')
+            ->get();
+        $liburByNik = [];
+        foreach ($liburSpesifikRows as $lr) {
+            $liburByNik[$lr->nik][$lr->tanggal_libur] = true;
+        }
 
-        foreach ($groupedKaryawan as $normName => $personData) {
-            $k = $personData['primary'];
-            $personNiks = array_values(array_unique($personData['all_niks']));
+        DB::beginTransaction();
+        try {
+            DB::table('penggajian_detail')->where('periode_id', $periodeId)->delete();
 
-            // Master salary: look for any master entry across all their NIKs that has gaji_pokok > 0
-            $master = DB::table('gaji_master')
-                ->whereIn('nik', $personNiks)
-                ->where('gaji_pokok', '>', 0)
-                ->first();
+            $totalGenerated = 0;
 
-            if (!$master) {
-                $master = DB::table('gaji_master')->whereIn('nik', $personNiks)->first();
-            }
+            foreach ($groupedKaryawan as $normName => $personData) {
+                $k = $personData['primary'];
+                $personNiks = array_values(array_unique($personData['all_niks']));
 
-            $gapok = $master ? $master->gaji_pokok : 1200000;
-            $tunjTransport = $master ? $master->tunjangan_transportasi : 150000;
-            $tunjJabatan = $master ? $master->tunjangan_jabatan : 0;
-            $tunjKonsumsi = $master ? $master->tunjangan_konsumsi : 0;
-            $tunjKehadiran = $master ? $master->tunjangan_kehadiran : 0;
-            $honorKegiatan = $master ? $master->tarif_honor_kegiatan : 0;
-            $honorEkskul = $master ? $master->tarif_ekskul : 0;
-            $upahLembur = $master ? $master->tarif_lembur : 0;
-
-            // Attendance calculation from presensi table across ALL branch NIKs of this employee
-            $presensiData = DB::table('presensi')
-                ->whereIn('nik', $personNiks)
-                ->whereBetween('tgl_presensi', [$tglMulai, $tglSelesai])
-                ->get();
-
-            $hadirDates = [];
-            $izinDates = [];
-            $sakitDates = [];
-            $alphaDates = [];
-            $telatByDate = [];
-            $hadirPagiDisiplinDates = [];
-
-            foreach ($presensiData as $p) {
-                $tgl = $p->tgl_presensi;
-                if ($p->status == 'h' || !empty($p->jam_in)) {
-                    $hadirDates[$tgl] = true;
-
-                    // Disiplin pagi check (06:30)
-                    if (!empty($p->jam_in) && date('H:i', strtotime($p->jam_in)) <= '06:30') {
-                        $hadirPagiDisiplinDates[$tgl] = true;
-                    }
-
-                    // Terlambat check
-                    $jamMasukJadwal = "07:00:00";
-                    if (!empty($p->kode_jam_kerja)) {
-                        $jk = DB::table('jam_kerja')->where('kode_jam_kerja', $p->kode_jam_kerja)->first();
-                        if ($jk && !empty($jk->jam_masuk)) {
-                            $jamMasukJadwal = $jk->jam_masuk;
+                $existingSlip = $existingMapByName[$normName] ?? null;
+                if (!$existingSlip) {
+                    foreach ($personNiks as $pNik) {
+                        if (isset($existingMapByNik[$pNik])) {
+                            $existingSlip = $existingMapByNik[$pNik];
+                            break;
                         }
                     }
+                }
 
-                    if (!empty($p->jam_in) && strtotime($p->jam_in) > strtotime($jamMasukJadwal)) {
-                        $diff = strtotime($p->jam_in) - strtotime($jamMasukJadwal);
-                        $jamTelat = floor($diff / 3600);
-                        $menitTelat = floor(($diff % 3600) / 60);
-                        $telatHours = ($jamTelat + round($menitTelat / 60, 2));
-                        if (!isset($telatByDate[$tgl]) || $telatHours < $telatByDate[$tgl]) {
-                            $telatByDate[$tgl] = $telatHours;
+                // Master salary: look for any master entry across all their NIKs that has gaji_pokok > 0
+                $master = DB::table('gaji_master')
+                    ->whereIn('nik', $personNiks)
+                    ->where('gaji_pokok', '>', 0)
+                    ->first();
+
+                if (!$master) {
+                    $master = DB::table('gaji_master')->whereIn('nik', $personNiks)->first();
+                }
+
+                $gapok = $existingSlip ? $existingSlip->gaji_pokok : ($master ? $master->gaji_pokok : 1200000);
+                $tunjTransport = $existingSlip ? $existingSlip->tunjangan_transportasi : ($master ? $master->tunjangan_transportasi : 150000);
+                $tunjJabatan = $existingSlip ? $existingSlip->tunjangan_jabatan : ($master ? $master->tunjangan_jabatan : 0);
+                $tunjKonsumsi = $existingSlip ? $existingSlip->tunjangan_konsumsi : ($master ? $master->tunjangan_konsumsi : 0);
+                $tunjKehadiran = $existingSlip ? $existingSlip->tunjangan_kehadiran : ($master ? $master->tunjangan_kehadiran : 0);
+                $tunjLainnya = $existingSlip ? ($existingSlip->tunjangan_lainnya ?? 0) : 0;
+                $honorKegiatan = $existingSlip ? $existingSlip->honor_kegiatan : ($master ? $master->tarif_honor_kegiatan : 0);
+                $honorEkskul = $existingSlip ? $existingSlip->honor_ekskul : ($master ? $master->tarif_ekskul : 0);
+                $upahLembur = $existingSlip ? $existingSlip->upah_lembur : ($master ? $master->tarif_lembur : 0);
+                $bonusTambahan = $existingSlip ? ($existingSlip->bonus_tambahan ?? 0) : 0;
+
+                // Attendance calculation from presensi table across ALL branch NIKs of this employee
+                $presensiData = DB::table('presensi')
+                    ->whereIn('nik', $personNiks)
+                    ->whereBetween('tgl_presensi', [$tglMulai, $tglSelesai])
+                    ->get();
+
+                $hadirDates = [];
+                $izinDates = [];
+                $sakitDates = [];
+                $cutiDates = [];
+                $alphaDates = [];
+                $liburDates = [];
+                $telatByDate = [];
+                $hadirPagiDisiplinDates = [];
+
+                foreach ($personNiks as $pNik) {
+                    if (!empty($liburByNik[$pNik])) {
+                        foreach ($liburByNik[$pNik] as $tglLibur => $val) {
+                            $liburDates[$tglLibur] = true;
                         }
-                    } else {
-                        $telatByDate[$tgl] = 0;
                     }
-                } elseif ($p->status == 'i') {
-                    $izinDates[$tgl] = true;
-                } elseif ($p->status == 's') {
-                    $sakitDates[$tgl] = true;
-                } elseif ($p->status == 'a') {
-                    $alphaDates[$tgl] = true;
                 }
-            }
 
-            $hadir = count($hadirDates);
-            // Clean up: date marked hadir cannot be counted as izin/sakit/alpha
-            foreach (array_keys($hadirDates) as $d) {
-                unset($izinDates[$d], $sakitDates[$d], $alphaDates[$d]);
-            }
-            $izin = count($izinDates);
-            foreach (array_keys($izinDates) as $d) {
-                unset($sakitDates[$d], $alphaDates[$d]);
-            }
-            $sakit = count($sakitDates);
-            foreach (array_keys($sakitDates) as $d) {
-                unset($alphaDates[$d]);
-            }
-            $alpha = count($alphaDates);
-            $totalJamTerlambat = array_sum($telatByDate);
-            $hadirPagiDisiplin = count($hadirPagiDisiplinDates);
+                foreach ($presensiData as $p) {
+                    $tgl = $p->tgl_presensi;
+                    if ($p->status == 'h' || !empty($p->jam_in)) {
+                        $hadirDates[$tgl] = true;
 
-            // Calculate alpha if total presence records is less than HK and period has ended
-            $totalDicatat = $hadir + $izin + $sakit + $alpha;
-            if ($totalDicatat < $hkStandar) {
-                $selisih = $hkStandar - $totalDicatat;
-                if (strtotime($tglSelesai) <= time()) {
-                    $alpha += $selisih;
+                        // Disiplin pagi check (06:30)
+                        if (!empty($p->jam_in) && date('H:i', strtotime($p->jam_in)) <= '06:30') {
+                            $hadirPagiDisiplinDates[$tgl] = true;
+                        }
+
+                        // Terlambat check
+                        $jamMasukJadwal = "07:00:00";
+                        if (!empty($p->kode_jam_kerja) && isset($jamKerjaMap[$p->kode_jam_kerja])) {
+                            $jk = $jamKerjaMap[$p->kode_jam_kerja];
+                            if ($jk && !empty($jk->jam_masuk) && $jk->jam_masuk != '00:00:00') {
+                                $jamMasukJadwal = $jk->jam_masuk;
+                            }
+                        }
+
+                        if (!empty($p->jam_in) && strtotime($p->jam_in) > strtotime($jamMasukJadwal)) {
+                            $diff = strtotime($p->jam_in) - strtotime($jamMasukJadwal);
+                            $jamTelat = floor($diff / 3600);
+                            $menitTelat = floor(($diff % 3600) / 60);
+                            $telatHours = ($jamTelat + round($menitTelat / 60, 2));
+                            if (!isset($telatByDate[$tgl]) || $telatHours < $telatByDate[$tgl]) {
+                                $telatByDate[$tgl] = $telatHours;
+                            }
+                        } else {
+                            $telatByDate[$tgl] = 0;
+                        }
+                    } elseif ($p->status == 'i') {
+                        $izinDates[$tgl] = true;
+                    } elseif ($p->status == 's') {
+                        $sakitDates[$tgl] = true;
+                    } elseif ($p->status == 'c') {
+                        $cutiDates[$tgl] = true;
+                    } elseif ($p->status == 'a') {
+                        $alphaDates[$tgl] = true;
+                    }
                 }
+
+                $hadir = count($hadirDates);
+                // Clean up priority: Hadir > Cuti > Sakit > Izin > Libur > Alpha
+                foreach (array_keys($hadirDates) as $d) {
+                    unset($cutiDates[$d], $sakitDates[$d], $izinDates[$d], $liburDates[$d], $alphaDates[$d]);
+                }
+                foreach (array_keys($cutiDates) as $d) {
+                    unset($sakitDates[$d], $izinDates[$d], $liburDates[$d], $alphaDates[$d]);
+                }
+                $cuti = count($cutiDates);
+                foreach (array_keys($sakitDates) as $d) {
+                    unset($izinDates[$d], $liburDates[$d], $alphaDates[$d]);
+                }
+                $sakit = count($sakitDates);
+                foreach (array_keys($izinDates) as $d) {
+                    unset($liburDates[$d], $alphaDates[$d]);
+                }
+                $izin = count($izinDates);
+                foreach (array_keys($liburDates) as $d) {
+                    unset($alphaDates[$d]);
+                }
+                $jmlLiburResmi = count($liburDates);
+                $alpha = count($alphaDates);
+                $totalJamTerlambat = array_sum($telatByDate);
+                $hadirPagiDisiplin = count($hadirPagiDisiplinDates);
+
+                // Calculate alpha if total presence records is less than HK and period has ended
+                $hkEfektif = $existingSlip && $existingSlip->hk_standar > 0 ? $existingSlip->hk_standar : $hkStandar;
+                $totalDicatat = $hadir + $izin + $sakit + $cuti + $jmlLiburResmi + $alpha;
+                if ($totalDicatat < $hkEfektif) {
+                    $selisih = $hkEfektif - $totalDicatat;
+                    if (strtotime($tglSelesai) <= time()) {
+                        $alpha += $selisih;
+                    }
+                }
+
+                $potonganKasbon = $existingSlip ? ($existingSlip->potongan_kasbon ?? 0) : ($master ? ($master->potongan_kasbon ?? 0) : 0);
+                $potonganBpjs = $existingSlip ? ($existingSlip->potongan_bpjs ?? 0) : ($master ? (($master->bpjs_kesehatan ?? 0) + ($master->bpjs_ketenagakerjaan ?? 0)) : 0);
+                $potonganLainnya = $existingSlip ? ($existingSlip->potongan_lainnya ?? 0) : ($master ? ($master->potongan_lainnya ?? 0) : 0);
+
+                // FORMULA STANDAR 26 HARI KERJA (SESUAI EXCEL ARJUNA)
+                $gajiBasisHarian = ($gapok + $tunjTransport);
+                $gajiHarian = $hkEfektif > 0 ? ($gajiBasisHarian / $hkEfektif) : 0;
+                $gajiPerJam = $gajiHarian > 0 ? ($gajiHarian / 10) : 0;
+
+                $potonganAbsen = round(($izin + $alpha) * $gajiHarian, 0);
+                $potonganTerlambat = round($totalJamTerlambat * $gajiPerJam, 0);
+
+                // Cabang & Jabatan Rules
+                $insentifPoolTpa = 0;
+                $rewardDisiplin = 0;
+
+                $isTpa = str_contains(strtoupper($k->jabatan ?? ''), 'TPA')
+                      || str_contains(strtoupper($k->kode_dept ?? ''), 'TPA')
+                      || str_contains(strtoupper($k->jabatan ?? ''), 'DAYCARE');
+
+                if ($isTpa) {
+                    $plafonPoolSpp    = $master ? (float)($master->hak_pool_spp  ?? 100000) : 100000;
+                    $plafonInsentifPagi = $master ? (float)($master->insentif_pagi ?? 50000)  : 50000;
+
+                    $insentifPoolTpa = ($totalSiswaTpa >= 41) ? $plafonPoolSpp : 0;
+
+                    $adaTerlambat = count(array_filter($telatByDate, fn($t) => $t > 0)) > 0;
+                    $rewardDisiplin = $adaTerlambat ? 0 : $plafonInsentifPagi;
+                }
+
+                $totalPenghasilan = $gapok + $tunjTransport + $tunjJabatan + $tunjKonsumsi + $tunjKehadiran + $tunjLainnya + $honorKegiatan + $honorEkskul + $upahLembur + $insentifPoolTpa + $rewardDisiplin + $bonusTambahan;
+                $totalPotongan = $potonganAbsen + $potonganTerlambat + $potonganKasbon + $potonganBpjs + $potonganLainnya;
+                $gajiBersih = max(0, $totalPenghasilan - $totalPotongan);
+
+                DB::table('penggajian_detail')->insert([
+                    'periode_id' => $periodeId,
+                    'nik' => $k->nik,
+                    'kode_cabang' => $k->kode_cabang,
+                    'kode_dept' => $k->kode_dept,
+                    'jabatan' => $k->jabatan,
+                    'hk_standar' => $hkEfektif,
+                    'hadir' => $hadir,
+                    'izin' => $izin,
+                    'sakit' => $sakit,
+                    'alpha' => $alpha,
+                    'terlambat_jam' => $totalJamTerlambat,
+                    'gaji_pokok' => $gapok,
+                    'tunjangan_transportasi' => $tunjTransport,
+                    'tunjangan_jabatan' => $tunjJabatan,
+                    'ket_tunjangan_jabatan' => $existingSlip ? $existingSlip->ket_tunjangan_jabatan : ($master->ket_tunjangan_jabatan ?? null),
+                    'tunjangan_konsumsi' => $tunjKonsumsi,
+                    'ket_tunjangan_konsumsi' => $existingSlip ? $existingSlip->ket_tunjangan_konsumsi : ($master->ket_tunjangan_konsumsi ?? null),
+                    'tunjangan_kehadiran' => $tunjKehadiran,
+                    'tunjangan_lainnya' => $tunjLainnya,
+                    'ket_tunjangan_lainnya' => $existingSlip ? $existingSlip->ket_tunjangan_lainnya : null,
+                    'honor_kegiatan' => $honorKegiatan,
+                    'ket_honor_kegiatan' => $existingSlip ? $existingSlip->ket_honor_kegiatan : ($master->ket_honor_kegiatan ?? null),
+                    'honor_ekskul' => $honorEkskul,
+                    'ket_honor_ekskul' => $existingSlip ? $existingSlip->ket_honor_ekskul : ($master->ket_honor_ekskul ?? null),
+                    'upah_lembur' => $upahLembur,
+                    'ket_upah_lembur' => $existingSlip ? $existingSlip->ket_upah_lembur : ($master->ket_tarif_lembur ?? null),
+                    'insentif_pool_tpa' => $insentifPoolTpa,
+                    'reward_disiplin' => $rewardDisiplin,
+                    'bonus_tambahan' => $bonusTambahan,
+                    'ket_bonus_tambahan' => $existingSlip ? $existingSlip->ket_bonus_tambahan : null,
+                    'potongan_absen' => $potonganAbsen,
+                    'potongan_terlambat' => $potonganTerlambat,
+                    'potongan_kasbon' => $potonganKasbon,
+                    'ket_potongan_kasbon' => $existingSlip ? $existingSlip->ket_potongan_kasbon : ($master->ket_potongan_kasbon ?? null),
+                    'potongan_bpjs' => $potonganBpjs,
+                    'potongan_lainnya' => $potonganLainnya,
+                    'ket_potongan_lainnya' => $existingSlip ? $existingSlip->ket_potongan_lainnya : ($master->ket_potongan_lainnya ?? null),
+                    'total_penghasilan' => $totalPenghasilan,
+                    'total_potongan' => $totalPotongan,
+                    'gaji_bersih' => $gajiBersih,
+                    'catatan' => $existingSlip ? $existingSlip->catatan : null,
+                    'status_kirim_wa' => $existingSlip ? $existingSlip->status_kirim_wa : 0,
+                    'tgl_kirim_wa' => $existingSlip ? $existingSlip->tgl_kirim_wa : null,
+                    'pdf_path' => $existingSlip ? $existingSlip->pdf_path : null,
+                    'link_token' => $existingSlip ? $existingSlip->link_token : null,
+                    'link_used_at' => $existingSlip ? $existingSlip->link_used_at : null,
+                    'created_at' => $existingSlip && $existingSlip->created_at ? $existingSlip->created_at : now(),
+                    'updated_at' => now(),
+                ]);
+
+                $totalGenerated++;
             }
 
-            $potonganKasbon = $master ? ($master->potongan_kasbon ?? 0) : 0;
-            $potonganBpjs = $master ? (($master->bpjs_kesehatan ?? 0) + ($master->bpjs_ketenagakerjaan ?? 0)) : 0;
-            $potonganLainnya = $master ? ($master->potongan_lainnya ?? 0) : 0;
-
-            // FORMULA STANDAR 26 HARI KERJA (SESUAI EXCEL ARJUNA)
-            // Gaji Basis Harian = Gaji Pokok + Tunjangan Transportasi
-            // Gaji Harian = Gaji Basis Harian / 26 HK
-            // Gaji Per Jam = Gaji Harian / 10 Jam
-            $gajiBasisHarian = ($gapok + $tunjTransport);
-            $gajiHarian = $hkStandar > 0 ? ($gajiBasisHarian / $hkStandar) : 0;
-            $gajiPerJam = $gajiHarian > 0 ? ($gajiHarian / 10) : 0;
-
-            $potonganAbsen = round(($izin + $alpha) * $gajiHarian, 0);
-            $potonganTerlambat = round($totalJamTerlambat * $gajiPerJam, 0);
-
-            // Cabang & Jabatan Rules
-            $insentifPoolTpa = 0;
-            $rewardDisiplin = 0;
-
-            $isTpa = str_contains(strtoupper($k->jabatan ?? ''), 'TPA')
-                  || str_contains(strtoupper($k->kode_dept ?? ''), 'TPA')
-                  || str_contains(strtoupper($k->jabatan ?? ''), 'DAYCARE');
-
-            if ($isTpa) {
-                // Plafon diambil dari master, fallback ke default sesuai pedoman PDF
-                $plafonPoolSpp    = $master ? (float)($master->hak_pool_spp  ?? 100000) : 100000;
-                $plafonInsentifPagi = $master ? (float)($master->insentif_pagi ?? 50000)  : 50000;
-
-                // Pool SPP — cair jika siswa TPA lunas >= 41
-                $insentifPoolTpa = ($totalSiswaTpa >= 41) ? $plafonPoolSpp : 0;
-
-                // Insentif Pagi ≤ 06:30 — GUGUR TOTAL jika ada 1 hari keterlambatan
-                $adaTerlambat = count(array_filter($telatByDate, fn($t) => $t > 0)) > 0;
-                $rewardDisiplin = $adaTerlambat ? 0 : $plafonInsentifPagi;
-            }
-            // Untuk non-TPA (Guru KB/TK): insentifPoolTpa = 0, rewardDisiplin = 0 (sudah default)
-
-            $totalPenghasilan = $gapok + $tunjTransport + $tunjJabatan + $tunjKonsumsi + $tunjKehadiran + $honorKegiatan + $honorEkskul + $upahLembur + $insentifPoolTpa + $rewardDisiplin;
-            $totalPotongan = $potonganAbsen + $potonganTerlambat + $potonganKasbon + $potonganBpjs + $potonganLainnya;
-            $gajiBersih = max(0, $totalPenghasilan - $totalPotongan);
-
-            DB::table('penggajian_detail')->insert([
-                'periode_id' => $periodeId,
-                'nik' => $k->nik,
-                'kode_cabang' => $k->kode_cabang,
-                'kode_dept' => $k->kode_dept,
-                'jabatan' => $k->jabatan,
-                'hk_standar' => $hkStandar,
-                'hadir' => $hadir,
-                'izin' => $izin,
-                'sakit' => $sakit,
-                'alpha' => $alpha,
-                'terlambat_jam' => $totalJamTerlambat,
-                'gaji_pokok' => $gapok,
-                'tunjangan_transportasi' => $tunjTransport,
-                'tunjangan_jabatan' => $tunjJabatan,
-                'ket_tunjangan_jabatan' => $master->ket_tunjangan_jabatan ?? null,
-                'tunjangan_konsumsi' => $tunjKonsumsi,
-                'ket_tunjangan_konsumsi' => $master->ket_tunjangan_konsumsi ?? null,
-                'tunjangan_kehadiran' => $tunjKehadiran,
-                'tunjangan_lainnya' => 0,
-                'ket_tunjangan_lainnya' => null,
-                'honor_kegiatan' => $honorKegiatan,
-                'ket_honor_kegiatan' => $master->ket_honor_kegiatan ?? null,
-                'honor_ekskul' => $honorEkskul,
-                'ket_honor_ekskul' => $master->ket_honor_ekskul ?? null,
-                'upah_lembur' => $upahLembur,
-                'ket_upah_lembur' => $master->ket_tarif_lembur ?? null,
-                'insentif_pool_tpa' => $insentifPoolTpa,
-                'reward_disiplin' => $rewardDisiplin,
-                'bonus_tambahan' => 0,
-                'ket_bonus_tambahan' => null,
-                'potongan_absen' => $potonganAbsen,
-                'potongan_terlambat' => $potonganTerlambat,
-                'potongan_kasbon' => $potonganKasbon,
-                'ket_potongan_kasbon' => $master->ket_potongan_kasbon ?? null,
-                'potongan_bpjs' => $potonganBpjs,
-                'potongan_lainnya' => $potonganLainnya,
-                'ket_potongan_lainnya' => $master->ket_potongan_lainnya ?? null,
-                'total_penghasilan' => $totalPenghasilan,
-                'total_potongan' => $totalPotongan,
-                'gaji_bersih' => $gajiBersih,
-                'status_kirim_wa' => 0,
-                'created_at' => now(),
+            $sumGajiBersih = DB::table('penggajian_detail')->where('periode_id', $periodeId)->sum('gaji_bersih');
+            DB::table('penggajian_periode')->where('id', $periodeId)->update([
+                'total_karyawan' => $totalGenerated,
+                'total_gaji' => $sumGajiBersih,
                 'updated_at' => now(),
             ]);
 
-            $totalGenerated++;
+            DB::commit();
+            return $totalGenerated;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            throw $e;
         }
-
-        return $totalGenerated;
     }
 
     /**
@@ -685,6 +794,7 @@ class GajiController extends Controller
             $hadirDates = [];
             $izinDates = [];
             $sakitDates = [];
+            $cutiDates = [];
             $alphaDates = [];
             $telatByDate = [];
 
@@ -695,13 +805,18 @@ class GajiController extends Controller
                     $jamMasukJadwal = "07:00:00";
                     if (!empty($p->kode_jam_kerja)) {
                         $jk = DB::table('jam_kerja')->where('kode_jam_kerja', $p->kode_jam_kerja)->first();
-                        if ($jk && !empty($jk->jam_masuk)) {
+                        if ($jk && !empty($jk->jam_masuk) && $jk->jam_masuk != '00:00:00') {
                             $jamMasukJadwal = $jk->jam_masuk;
                         }
                     }
                     if (!empty($p->jam_in) && strtotime($p->jam_in) > strtotime($jamMasukJadwal)) {
-                        $diffSeconds = strtotime($p->jam_in) - strtotime($jamMasukJadwal);
-                        $telatByDate[$tgl] = round($diffSeconds / 3600, 2);
+                        $diff = strtotime($p->jam_in) - strtotime($jamMasukJadwal);
+                        $jamTelat = floor($diff / 3600);
+                        $menitTelat = floor(($diff % 3600) / 60);
+                        $telatHours = ($jamTelat + round($menitTelat / 60, 2));
+                        if (!isset($telatByDate[$tgl]) || $telatHours < $telatByDate[$tgl]) {
+                            $telatByDate[$tgl] = $telatHours;
+                        }
                     } else {
                         $telatByDate[$tgl] = 0;
                     }
@@ -709,6 +824,8 @@ class GajiController extends Controller
                     $izinDates[$tgl] = true;
                 } elseif ($p->status == 's') {
                     $sakitDates[$tgl] = true;
+                } elseif ($p->status == 'c') {
+                    $cutiDates[$tgl] = true;
                 } elseif ($p->status == 'a') {
                     $alphaDates[$tgl] = true;
                 }
@@ -716,8 +833,12 @@ class GajiController extends Controller
 
             $hadir = count($hadirDates);
             foreach (array_keys($hadirDates) as $d) {
+                unset($cutiDates[$d], $izinDates[$d], $sakitDates[$d], $alphaDates[$d]);
+            }
+            foreach (array_keys($cutiDates) as $d) {
                 unset($izinDates[$d], $sakitDates[$d], $alphaDates[$d]);
             }
+            $cuti = count($cutiDates);
             $izin = count($izinDates);
             foreach (array_keys($izinDates) as $d) {
                 unset($sakitDates[$d], $alphaDates[$d]);
@@ -730,7 +851,7 @@ class GajiController extends Controller
             $totalJamTerlambat = array_sum($telatByDate);
 
             // Calculate alpha if total presence records is less than HK and period has ended
-            $totalDicatat = $hadir + $izin + $sakit + $alpha;
+            $totalDicatat = $hadir + $izin + $sakit + $cuti + $alpha;
             if ($totalDicatat < $hkStandar) {
                 $selisih = $hkStandar - $totalDicatat;
                 if (strtotime($tglSelesai) <= time()) {
@@ -869,14 +990,18 @@ class GajiController extends Controller
             return redirect('/gaji')->with(['warning' => 'Periode penggajian tidak ditemukan']);
         }
 
-        // Auto-sync any missing employees from Data Master Karyawan
+        // Auto-sync missing employees AND latest attendance from presensi non-destructively for active periods
         if ($periode->status != 'terbayar') {
             try {
-                $newAdded = self::syncMissingEmployeesToPeriod($id);
-                if ($newAdded > 0) {
-                    $periode = DB::table('penggajian_periode')->where('id', $id)->first();
-                    session()->flash('success', $newAdded . ' karyawan baru dari Data Master otomatis ditambahkan ke periode ini dan siap disetting gajinya!');
-                }
+                $this->generateDetailsForPeriod(
+                    $id,
+                    $periode->tgl_mulai,
+                    $periode->tgl_selesai,
+                    $periode->hk_standar > 0 ? $periode->hk_standar : 26,
+                    $periode->total_siswa_tpa ?? 0,
+                    true
+                );
+                $periode = DB::table('penggajian_periode')->where('id', $id)->first();
             } catch (\Throwable $e) {}
         }
 
@@ -2114,10 +2239,20 @@ class GajiController extends Controller
                 $potonganTerlambat = round($d->terlambat_jam * $gajiPerJam, 0);
                 $potonganBpjs = $bpjsKesehatan;
 
+                $isTpaSlip = str_contains(strtoupper($d->jabatan ?? ''), 'TPA')
+                          || str_contains(strtoupper($d->kode_dept ?? ''), 'TPA')
+                          || str_contains(strtoupper($d->jabatan ?? ''), 'DAYCARE');
+                $insentifPoolTpaSlip = $d->insentif_pool_tpa ?? 0;
+                $rewardDisiplinSlip = $d->reward_disiplin ?? 0;
+                if ($isTpaSlip) {
+                    $insentifPoolTpaSlip = (($periode->total_siswa_tpa ?? 0) >= 41) ? $hakPoolSpp : 0;
+                    $rewardDisiplinSlip = ($d->terlambat_jam > 0) ? 0 : $insentifPagi;
+                }
+
                 $totalPenghasilan = $gapok + $tunjTransport + $tunjJabatan + $tunjKonsumsi 
                     + ($d->tunjangan_kehadiran ?? 0) 
                     + $honorKegiatan + $honorEkskul + $upahLembur 
-                    + ($d->insentif_pool_tpa ?? 0) + ($d->reward_disiplin ?? 0) 
+                    + $insentifPoolTpaSlip + $rewardDisiplinSlip 
                     + ($d->bonus_tambahan ?? 0) + ($d->tunjangan_lainnya ?? 0);
 
                 $totalPotongan = $potonganAbsen + $potonganTerlambat + $potonganKasbon + $potonganBpjs + $potonganLainnya;
@@ -2136,6 +2271,8 @@ class GajiController extends Controller
                     'ket_honor_ekskul' => $ketHonorEkskul,
                     'upah_lembur' => $upahLembur,
                     'ket_upah_lembur' => $ketTarifLembur,
+                    'insentif_pool_tpa' => $insentifPoolTpaSlip,
+                    'reward_disiplin' => $rewardDisiplinSlip,
                     'potongan_kasbon' => $potonganKasbon,
                     'ket_potongan_kasbon' => $ketPotonganKasbon,
                     'potongan_bpjs' => $potonganBpjs,
@@ -2166,6 +2303,12 @@ class GajiController extends Controller
 
                 $syncedSlips++;
             }
+
+            $sumGaji = DB::table('penggajian_detail')->where('periode_id', $periode->id)->sum('gaji_bersih');
+            DB::table('penggajian_periode')->where('id', $periode->id)->update([
+                'total_gaji' => $sumGaji,
+                'updated_at' => now(),
+            ]);
         }
 
         $nama = $currentKaryawan ? $currentKaryawan->nama_lengkap : $nik;
@@ -2231,10 +2374,22 @@ class GajiController extends Controller
                 $potonganAbsen = round(($d->izin + $d->alpha) * $gajiHarianCalc, 0);
                 $potonganTerlambat = round($d->terlambat_jam * $gajiPerJam, 0);
 
+                $isTpaSlip = str_contains(strtoupper($d->jabatan ?? ''), 'TPA')
+                          || str_contains(strtoupper($d->kode_dept ?? ''), 'TPA')
+                          || str_contains(strtoupper($d->jabatan ?? ''), 'DAYCARE');
+                $insentifPoolTpaSlip = $d->insentif_pool_tpa ?? 0;
+                $rewardDisiplinSlip = $d->reward_disiplin ?? 0;
+                if ($isTpaSlip) {
+                    $plafonPoolSpp = (float)($master->hak_pool_spp ?? 100000);
+                    $plafonInsentifPagi = (float)($master->insentif_pagi ?? 50000);
+                    $insentifPoolTpaSlip = (($periode->total_siswa_tpa ?? 0) >= 41) ? $plafonPoolSpp : 0;
+                    $rewardDisiplinSlip = ($d->terlambat_jam > 0) ? 0 : $plafonInsentifPagi;
+                }
+
                 $totalPenghasilan = $gapok + $tunjTransport + $tunjJabatan + $tunjKonsumsi 
                     + ($d->tunjangan_kehadiran ?? 0) 
                     + $honorKegiatan + $honorEkskul + $upahLembur 
-                    + ($d->insentif_pool_tpa ?? 0) + ($d->reward_disiplin ?? 0) 
+                    + $insentifPoolTpaSlip + $rewardDisiplinSlip 
                     + ($d->bonus_tambahan ?? 0) + ($d->tunjangan_lainnya ?? 0);
 
                 $totalPotongan = $potonganAbsen + $potonganTerlambat + $potonganKasbon + $potonganBpjs + $potonganLainnya;
@@ -2253,6 +2408,8 @@ class GajiController extends Controller
                     'ket_honor_ekskul' => $master->ket_honor_ekskul,
                     'upah_lembur' => $upahLembur,
                     'ket_upah_lembur' => $master->ket_tarif_lembur,
+                    'insentif_pool_tpa' => $insentifPoolTpaSlip,
+                    'reward_disiplin' => $rewardDisiplinSlip,
                     'potongan_kasbon' => $potonganKasbon,
                     'ket_potongan_kasbon' => $master->ket_potongan_kasbon,
                     'potongan_bpjs' => $potonganBpjs,

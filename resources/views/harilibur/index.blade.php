@@ -54,19 +54,18 @@
                             @endrole
                             <div class="row mt-2">
                                 <div class="col-12">
-                                    {{-- <form action="/karyawan" method="GET">
-                                        <div class="row">
-                                            <div class="col-4">
+                                    <form action="/konfigurasi/harilibur" method="GET">
+                                        <div class="row g-2">
+                                            <div class="col-md-6 col-12">
                                                 <div class="form-group">
-                                                    <input type="text" name="nama_karyawan" id="nama_karyawan"
-                                                        class="form-control" placeholder="Nama Karyawan"
-                                                        value="{{ Request('nama_karyawan') }}">
+                                                    <input type="text" name="keterangan" id="keterangan_search"
+                                                        class="form-control" placeholder="Cari Keterangan / Kode Libur / Cabang..."
+                                                        value="{{ Request('keterangan') }}">
                                                 </div>
                                             </div>
-
-                                            <div class="col-2">
+                                            <div class="col-md-2 col-12">
                                                 <div class="form-group">
-                                                    <button type="submit" class="btn btn-primary">
+                                                    <button type="submit" class="btn btn-primary w-100">
                                                         <svg xmlns="http://www.w3.org/2000/svg"
                                                             class="icon icon-tabler icon-tabler-search" width="24"
                                                             height="24" viewBox="0 0 24 24" stroke-width="2"
@@ -81,7 +80,7 @@
                                                 </div>
                                             </div>
                                         </div>
-                                    </form> --}}
+                                    </form>
                                 </div>
                             </div>
                             <div class="row mt-2">

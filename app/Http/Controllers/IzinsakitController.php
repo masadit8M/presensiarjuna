@@ -84,6 +84,15 @@ class IzinsakitController extends Controller
                     $sid = $kode_izin . "." . $request->file('sid')->getClientOriginalExtension();
                     $folderPath = "public/uploads/sid/";
                     $request->file('sid')->storeAs($folderPath, $sid);
+                    try {
+                        $src = storage_path('app/public/uploads/sid/' . $sid);
+                        if (is_file($src)) {
+                            foreach ([public_path('storage/uploads/sid'), public_path('uploads/sid')] as $destDir) {
+                                if (!is_dir($destDir)) @mkdir($destDir, 0755, true);
+                                @copy($src, $destDir . DIRECTORY_SEPARATOR . $sid);
+                            }
+                        }
+                    } catch (\Throwable $ex) {}
                 }
                 return redirect('/presensi/izin')->with(['success' => 'Data Berhasil Disimpan']);
             } else {
@@ -131,10 +140,11 @@ class IzinsakitController extends Controller
             return redirect('/presensi/izin')->with(['error' => 'Tidak Bisa Melakukan Pengajuan Pada Tanggal Tersebut Karena Ada tanggal yang sudah digunakan Sebelumnya !']);
         }
 
+        $existingIzin = DB::table('pengajuan_izin')->where('kode_izin', $kode_izin)->first();
         if ($request->hasFile('sid')) {
             $sid = $kode_izin . "." . $request->file('sid')->getClientOriginalExtension();
         } else {
-            $sid = null;
+            $sid = $existingIzin ? $existingIzin->doc_sid : null;
         }
         $data = [
             'tgl_izin_dari' => $tgl_izin_dari,
@@ -152,6 +162,15 @@ class IzinsakitController extends Controller
                 $sid = $kode_izin . "." . $request->file('sid')->getClientOriginalExtension();
                 $folderPath = "public/uploads/sid/";
                 $request->file('sid')->storeAs($folderPath, $sid);
+                try {
+                    $src = storage_path('app/public/uploads/sid/' . $sid);
+                    if (is_file($src)) {
+                        foreach ([public_path('storage/uploads/sid'), public_path('uploads/sid')] as $destDir) {
+                            if (!is_dir($destDir)) @mkdir($destDir, 0755, true);
+                            @copy($src, $destDir . DIRECTORY_SEPARATOR . $sid);
+                        }
+                    }
+                } catch (\Throwable $ex) {}
             }
 
             return redirect('/presensi/izin')->with(['success' => 'Data Berhasil Diupdate']);

@@ -15,9 +15,9 @@ class UserController extends Controller
         $role = DB::table('roles')->orderBy('id')->get();
         $query = User::query();
         $query->select('users.id', 'users.name', 'email', 'nama_dept', 'roles.name as role', 'kode_cabang');
-        $query->join('departemen', 'users.kode_dept', '=', 'departemen.kode_dept');
-        $query->join('model_has_roles', 'users.id', '=', 'model_has_roles.model_id');
-        $query->join('roles', 'model_has_roles.role_id', '=', 'roles.id');
+        $query->leftJoin('departemen', 'users.kode_dept', '=', 'departemen.kode_dept');
+        $query->leftJoin('model_has_roles', 'users.id', '=', 'model_has_roles.model_id');
+        $query->leftJoin('roles', 'model_has_roles.role_id', '=', 'roles.id');
         if (!empty($request->name)) {
             $query->where(function ($q) use ($request) {
                 $q->where('users.name', 'like', '%' . $request->name . '%')
@@ -57,8 +57,6 @@ class UserController extends Controller
 
             return Redirect::back()->with(['success' => ' Data Berhasil Disimpan']);
         } catch (\Exception $e) {
-
-            dd($e);
             DB::rollBack();
             return Redirect::back()->with(['warning' => ' Data Gagal Disimpan']);
         }
@@ -71,7 +69,7 @@ class UserController extends Controller
         $role = DB::table('roles')->orderBy('id')->get();
         $cabang = DB::table('cabang')->orderBy('kode_cabang')->get();
         $user = DB::table('users')
-            ->join('model_has_roles', 'users.id', '=', 'model_has_roles.model_id')
+            ->leftJoin('model_has_roles', 'users.id', '=', 'model_has_roles.model_id')
             ->where('id', $id_user)->first();
         return view('users.edituser', compact('departemen', 'role', 'user', 'cabang'));
     }
@@ -117,8 +115,7 @@ class UserController extends Controller
             DB::commit();
             return Redirect::back()->with(['success' => 'Data Berhasil Diupdate']);
         } catch (\Exception $e) {
-
-            dd($e);
+            DB::rollBack();
             return Redirect::back()->with(['warning' => 'Data Gagal Diupdate']);
         }
     }

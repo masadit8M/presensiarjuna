@@ -357,6 +357,9 @@ class PresensiController extends Controller
             if ($update) {
                 echo "success|Terimakasih, Hati Hati Di Jalan|out";
                 $this->saveAbsensiPhoto($fileName, $image_base64);
+                try {
+                    GajiController::syncAttendanceByDate($tgl_presensi);
+                } catch (\Throwable $e) {}
 
                 $gatewayUrl = env('WA_GATEWAY_URL');
                 if (!empty($gatewayUrl) && !str_contains($gatewayUrl, 'pedasalami.com')) {
@@ -397,6 +400,9 @@ class PresensiController extends Controller
             if ($simpan) {
                 echo "success|Terimkasih, Selamat Bekerja|in";
                 $this->saveAbsensiPhoto($fileName, $image_base64);
+                try {
+                    GajiController::syncAttendanceByDate($tgl_presensi);
+                } catch (\Throwable $e) {}
 
                 $gatewayUrl = env('WA_GATEWAY_URL');
                 if (!empty($gatewayUrl) && !str_contains($gatewayUrl, 'pedasalami.com')) {
@@ -454,6 +460,45 @@ class PresensiController extends Controller
         }
     }
 
+    /**
+     * Handler route /storage/{path} agar foto selfie absensi, foto profil karyawan,
+     * dan dokumen surat izin/sakit (SID) selalu tampil meskipun symlink storage tidak aktif.
+     */
+    public function showStorageImage($path)
+    {
+        $cleanPath = ltrim(str_replace(['..', '\\'], ['', '/'], $path), '/');
+
+        $candidates = [
+            storage_path('app/public/' . $cleanPath),
+            public_path('storage/' . $cleanPath),
+            public_path($cleanPath),
+            base_path('public_html/storage/' . $cleanPath),
+            base_path('public_html/' . $cleanPath),
+        ];
+
+        foreach ($candidates as $fullPath) {
+            if (is_file($fullPath) && is_readable($fullPath)) {
+                return response()->file($fullPath, [
+                    'Cache-Control' => 'public, max-age=86400',
+                ]);
+            }
+        }
+
+        // Fallback image jika file foto tidak ditemukan di disk
+        $fallback = public_path('assets/img/sample/avatar/avatar1.jpg');
+        if (str_contains($cleanPath, 'absensi')) {
+            $cameraFallback = public_path('assets/img/camera.jpg');
+            if (is_file($cameraFallback)) {
+                $fallback = $cameraFallback;
+            }
+        }
+        if (is_file($fallback)) {
+            return response()->file($fallback);
+        }
+
+        abort(404);
+    }
+
     //Menghitung Jarak
     function distance($lat1, $lon1, $lat2, $lon2)
     {
@@ -506,14 +551,23 @@ class PresensiController extends Controller
             ];
         }
 
-        $update = DB::table('karyawan')->where('nik', $nik)->update($data);
-        if ($update) {
+        try {
+            DB::table('karyawan')->where('nik', $nik)->update($data);
             if ($request->hasFile('foto')) {
                 $folderPath = "public/uploads/karyawan/";
                 $request->file('foto')->storeAs($folderPath, $foto);
+                $rawContent = @file_get_contents($request->file('foto')->getRealPath());
+                if ($rawContent !== false) {
+                    foreach ([public_path('storage/uploads/karyawan'), public_path('uploads/karyawan')] as $dir) {
+                        if (!file_exists($dir)) {
+                            @mkdir($dir, 0777, true);
+                        }
+                        @file_put_contents($dir . DIRECTORY_SEPARATOR . $foto, $rawContent);
+                    }
+                }
             }
             return Redirect::back()->with(['success' => 'Data Berhasil Di Update']);
-        } else {
+        } catch (\Exception $e) {
             return Redirect::back()->with(['error' => 'Data gagal Di Update']);
         }
     }
@@ -961,6 +1015,9 @@ class PresensiController extends Controller
         $status_approved = $request->status_approved;
         $kode_izin = $request->kode_izin_form;
         $dataizin = DB::table('pengajuan_izin')->where('kode_izin', $kode_izin)->first();
+        if (!$dataizin) {
+            return Redirect::back()->with(['warning' => 'Data Izin Tidak Ditemukan']);
+        }
         $nik = $dataizin->nik;
         $tgl_dari = $dataizin->tgl_izin_dari;
         $tgl_sampai = $dataizin->tgl_izin_sampai;
@@ -968,45 +1025,43 @@ class PresensiController extends Controller
         DB::beginTransaction();
         try {
             if ($status_approved == 1) {
-                while (strtotime($tgl_dari) <= strtotime($tgl_sampai)) {
-
-                    DB::table('presensi')->insert([
-                        'nik' => $nik,
-                        'tgl_presensi' => $tgl_dari,
-                        'status' => $status,
-                        'kode_izin' => $kode_izin
-                    ]);
-                    $tgl_dari = date("Y-m-d", strtotime("+1 days", strtotime($tgl_dari)));
+                $currDate = $tgl_dari;
+                while (strtotime($currDate) <= strtotime($tgl_sampai)) {
+                    DB::table('presensi')->updateOrInsert(
+                        [
+                            'nik' => $nik,
+                            'tgl_presensi' => $currDate,
+                        ],
+                        [
+                            'status' => $status,
+                            'kode_izin' => $kode_izin,
+                        ]
+                    );
+                    $currDate = date("Y-m-d", strtotime("+1 days", strtotime($currDate)));
                 }
+            } else {
+                DB::table('presensi')->where('kode_izin', $kode_izin)->delete();
             }
-
 
             DB::table('pengajuan_izin')->where('kode_izin', $kode_izin)->update([
                 'status_approved' => $status_approved
             ]);
             DB::commit();
+
+            try {
+                GajiController::syncAttendanceByDate($dataizin->tgl_izin_dari);
+            } catch (\Throwable $e) {}
+
             return Redirect::back()->with(['success' => 'Data Berhasil Diproses']);
         } catch (\Exception $e) {
             DB::rollBack();
-            dd($e);
-            return Redirect::back()->with(['warning' => 'Data Gagal Diproses']);
+            return Redirect::back()->with(['warning' => 'Data Gagal Diproses: ' . $e->getMessage()]);
         }
-
-
-        // $update = DB::table('pengajuan_izin')->where('id', $kode_izin)->update([
-        //     'status_approved' => $status_approved
-        // ]);
-        // if ($update) {
-        //     return Redirect::back()->with(['success' => 'Data Berhasil Di Update']);
-        // } else {
-        //     return Redirect::back()->with(['warning' => 'Data Gagal Di Update']);
-        // }
     }
 
     public function batalkanizinsakit($kode_izin)
     {
-
-
+        $dataizin = DB::table('pengajuan_izin')->where('kode_izin', $kode_izin)->first();
         DB::beginTransaction();
         try {
             DB::table('pengajuan_izin')->where('kode_izin', $kode_izin)->update([
@@ -1014,19 +1069,17 @@ class PresensiController extends Controller
             ]);
             DB::table('presensi')->where('kode_izin', $kode_izin)->delete();
             DB::commit();
+
+            if ($dataizin && !empty($dataizin->tgl_izin_dari)) {
+                try {
+                    GajiController::syncAttendanceByDate($dataizin->tgl_izin_dari);
+                } catch (\Throwable $e) {}
+            }
+
             return Redirect::back()->with(['success' => 'Data Berhasil Di Batalkan']);
         } catch (\Exception $e) {
             DB::rollBack();
             return Redirect::back()->with(['warning' => 'Data Gagal DI Batalkan']);
-        }
-
-        $update = DB::table('pengajuan_izin')->where('kode_izin', $kode_izin)->update([
-            'status_approved' => 0
-        ]);
-        if ($update) {
-            return Redirect::back()->with(['success' => 'Data Berhasil Di Update']);
-        } else {
-            return Redirect::back()->with(['warning' => 'Data Gagal Di Update']);
         }
     }
 
@@ -1035,7 +1088,7 @@ class PresensiController extends Controller
         $tgl_izin = $request->tgl_izin;
         $nik = Auth::guard('karyawan')->user()->nik;
 
-        $cek = DB::table('pengajuan_izin')->where('nik', $nik)->where('tgl_izin', $tgl_izin)->count();
+        $cek = DB::table('pengajuan_izin')->where('nik', $nik)->where('tgl_izin_dari', $tgl_izin)->count();
         return $cek;
     }
 
@@ -1064,19 +1117,22 @@ class PresensiController extends Controller
     public function deleteizin($kode_izin)
     {
         $cekdataizin = DB::table('pengajuan_izin')->where('kode_izin', $kode_izin)->first();
-        $doc_sid = $cekdataizin->doc_sid;
+        $doc_sid = $cekdataizin->doc_sid ?? null;
 
         try {
             DB::table('pengajuan_izin')->where('kode_izin', $kode_izin)->delete();
-            // dd($doc_sid);
+            DB::table('presensi')->where('kode_izin', $kode_izin)->delete();
             if ($doc_sid != null) {
-
                 Storage::delete('/public/uploads/sid/' . $doc_sid);
+            }
+            if ($cekdataizin && !empty($cekdataizin->tgl_izin_dari)) {
+                try {
+                    GajiController::syncAttendanceByDate($cekdataizin->tgl_izin_dari);
+                } catch (\Throwable $e) {}
             }
             return redirect('/presensi/izin')->with(['success' => 'Data Berhasil Dihapus']);
         } catch (\Exception $e) {
             return redirect('/presensi/izin')->with(['error' => 'Data Gagal Dihapus']);
-            //throw $th;
         }
     }
 
@@ -1124,10 +1180,12 @@ class PresensiController extends Controller
                 ]);
             }
 
+            try {
+                GajiController::syncAttendanceByDate($tanggal);
+            } catch (\Throwable $e) {}
 
-            return Redirect::back()->with(['success' => 'Data Berhasil Disimpan']);
+            return Redirect::back()->with(['success' => 'Data Berhasil Disimpan & Disinkronkan ke Periode Gaji']);
         } catch (\Exception $e) {
-            dd($e);
             return Redirect::back()->with(['warning' => 'Data Gagal Disimpan']);
         }
     }

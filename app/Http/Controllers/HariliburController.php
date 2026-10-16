@@ -9,12 +9,20 @@ use Illuminate\Support\Facades\Redirect;
 
 class HariliburController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-
         $query = Harilibur::query();
+        if (!empty($request->keterangan)) {
+            $cari = $request->keterangan;
+            $query->where(function ($q) use ($cari) {
+                $q->where('keterangan', 'like', '%' . $cari . '%')
+                    ->orWhere('kode_libur', 'like', '%' . $cari . '%')
+                    ->orWhere('kode_cabang', 'like', '%' . $cari . '%');
+            });
+        }
         $query->orderBy('kode_libur', 'desc');
         $harilibur = $query->paginate(10);
+        $harilibur->appends($request->all());
         return view('harilibur.index', compact('harilibur'));
     }
 

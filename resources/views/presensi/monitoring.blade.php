@@ -57,10 +57,9 @@
                             </div>
                             <div class="row">
                                 @role('administrator', 'user')
-                                    <div class="col-4">
+                                    <div class="col-md-3">
                                         <div class="input-icon mb-3">
                                             <span class="input-icon-addon">
-                                                <!-- Download SVG icon from http://tabler-icons.io/i/user -->
                                                 <svg xmlns="http://www.w3.org/2000/svg"
                                                     class="icon icon-tabler icon-tabler-calendar-event" width="24"
                                                     height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
@@ -75,13 +74,13 @@
                                                     <path d="M8 15h2v2h-2z"></path>
                                                 </svg>
                                             </span>
-                                            <input type="text" id="tanggal" value="{{ date('Y-m-d') }}" name="tanggal"
-                                                value="" class="form-control" placeholder="Tanggal Presensi"
+                                            <input type="text" id="tanggal" value="{{ Request('tanggal', date('Y-m-d')) }}" name="tanggal"
+                                                class="form-control" placeholder="Tanggal Presensi"
                                                 autocomplete="off">
                                         </div>
                                     </div>
-                                    <div class="col-4">
-                                        <div class="form-group">
+                                    <div class="col-md-3">
+                                        <div class="form-group mb-3">
                                             <select name="kode_cabang" id="kode_cabang" class="form-select">
                                                 <option value="">Semua Cabang</option>
                                                 @foreach ($cabang as $d)
@@ -91,8 +90,8 @@
                                             </select>
                                         </div>
                                     </div>
-                                    <div class="col-4">
-                                        <div class="form-group">
+                                    <div class="col-md-3">
+                                        <div class="form-group mb-3">
                                             <select name="kode_dept" id="kode_dept" class="form-select">
                                                 <option value="">Semua Departemen</option>
                                                 @foreach ($departemen as $d)
@@ -102,11 +101,23 @@
                                             </select>
                                         </div>
                                     </div>
-                                @else
-                                    <div class="col-12">
+                                    <div class="col-md-3">
                                         <div class="input-icon mb-3">
                                             <span class="input-icon-addon">
-                                                <!-- Download SVG icon from http://tabler-icons.io/i/user -->
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-search" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                                    <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                                                    <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
+                                                    <path d="M21 21l-6 -6"></path>
+                                                </svg>
+                                            </span>
+                                            <input type="text" id="nama_karyawan" name="nama_karyawan" value="{{ Request('nama_karyawan') }}"
+                                                class="form-control" placeholder="Cari Nama / NIK Karyawan..." autocomplete="off">
+                                        </div>
+                                    </div>
+                                @else
+                                    <div class="col-md-6">
+                                        <div class="input-icon mb-3">
+                                            <span class="input-icon-addon">
                                                 <svg xmlns="http://www.w3.org/2000/svg"
                                                     class="icon icon-tabler icon-tabler-calendar-event" width="24"
                                                     height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
@@ -121,9 +132,22 @@
                                                     <path d="M8 15h2v2h-2z"></path>
                                                 </svg>
                                             </span>
-                                            <input type="text" id="tanggal" value="{{ date('Y-m-d') }}" name="tanggal"
-                                                value="" class="form-control" placeholder="Tanggal Presensi"
+                                            <input type="text" id="tanggal" value="{{ Request('tanggal', date('Y-m-d')) }}" name="tanggal"
+                                                class="form-control" placeholder="Tanggal Presensi"
                                                 autocomplete="off">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="input-icon mb-3">
+                                            <span class="input-icon-addon">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-search" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                                    <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                                                    <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
+                                                    <path d="M21 21l-6 -6"></path>
+                                                </svg>
+                                            </span>
+                                            <input type="text" id="nama_karyawan" name="nama_karyawan" value="{{ Request('nama_karyawan') }}"
+                                                class="form-control" placeholder="Cari Nama / NIK Karyawan..." autocomplete="off">
                                         </div>
                                     </div>
                                 @endrole
@@ -199,18 +223,21 @@
                 format: 'yyyy-mm-dd'
             });
 
+            var searchTimer = null;
             function loadpresensi() {
                 var tanggal = $("#tanggal").val();
                 var kode_cabang = $("#kode_cabang").val();
                 var kode_dept = $("#kode_dept").val();
+                var nama_karyawan = $("#nama_karyawan").val();
                 $.ajax({
                     type: 'POST',
-                    url: '/getpresensi',
+                    url: '{{ url('/getpresensi') }}',
                     data: {
                         _token: "{{ csrf_token() }}",
                         tanggal: tanggal,
                         kode_cabang: kode_cabang,
-                        kode_dept: kode_dept
+                        kode_dept: kode_dept,
+                        nama_karyawan: nama_karyawan
                     },
                     cache: false,
                     success: function(respond) {
@@ -229,6 +256,14 @@
             $("#kode_dept").change(function(e) {
                 loadpresensi();
             });
+
+            $("#nama_karyawan").on("keyup input", function() {
+                clearTimeout(searchTimer);
+                searchTimer = setTimeout(function() {
+                    loadpresensi();
+                }, 250);
+            });
+
             loadpresensi();
 
         });

@@ -83,11 +83,9 @@ class DashboardController extends Controller
         return view('dashboard.dashboard', compact('presensihariini', 'historibulanini', 'namabulan', 'bulanini', 'tahunini', 'rekappresensi', 'leaderboard', 'cabang', 'departemen'));
     }
 
-    public function dashboardadmin()
+    public function dashboardadmin(Request $request)
     {
-
-
-        $hariini = date("Y-m-d");
+        $hariini = $request->tanggal ?: date("Y-m-d");
 
         $rekappresensi = DB::table('presensi')
             ->selectRaw('
@@ -96,13 +94,94 @@ class DashboardController extends Controller
             SUM(IF(status="s",1,0)) as jmlsakit,
             SUM(IF(status="c",1,0)) as jmlcuti,
             SUM(IF(jam_in > jam_masuk ,1,0)) as jmlterlambat
-
             ')
             ->leftJoin('jam_kerja', 'presensi.kode_jam_kerja', '=', 'jam_kerja.kode_jam_kerja')
             ->where('tgl_presensi', $hariini)
             ->first();
 
+        $query = DB::table('karyawan')
+            ->selectRaw('
+                karyawan.nik,
+                karyawan.nama_lengkap,
+                karyawan.jabatan,
+                karyawan.kode_dept,
+                karyawan.kode_cabang,
+                karyawan.foto as foto_profil,
+                cabang.nama_cabang,
+                datapresensi.id,
+                datapresensi.jam_in,
+                datapresensi.jam_out,
+                datapresensi.foto_in,
+                datapresensi.foto_out,
+                datapresensi.lokasi_in,
+                datapresensi.lokasi_out,
+                datapresensi.status,
+                datapresensi.jam_masuk,
+                datapresensi.nama_jam_kerja,
+                datapresensi.jam_pulang,
+                datapresensi.keterangan
+            ')
+            ->leftJoin('cabang', 'karyawan.kode_cabang', '=', 'cabang.kode_cabang')
+            ->leftJoin(
+                DB::raw("(
+                    SELECT
+                        presensi.nik,
+                        presensi.id,
+                        jam_in,
+                        jam_out,
+                        foto_in,
+                        foto_out,
+                        lokasi_in,
+                        lokasi_out,
+                        presensi.status,
+                        jam_masuk,
+                        nama_jam_kerja,
+                        jam_pulang,
+                        keterangan
+                    FROM presensi
+                    LEFT JOIN jam_kerja ON presensi.kode_jam_kerja = jam_kerja.kode_jam_kerja
+                    LEFT JOIN pengajuan_izin ON presensi.kode_izin = pengajuan_izin.kode_izin
+                    WHERE tgl_presensi = '$hariini'
+                ) datapresensi"),
+                function ($join) {
+                    $join->on('karyawan.nik', '=', 'datapresensi.nik');
+                }
+            );
 
-        return view('dashboard.dashboardadmin', compact('rekappresensi'));
+        if (!empty($request->kode_cabang)) {
+            $query->where('karyawan.kode_cabang', $request->kode_cabang);
+        }
+        if (!empty($request->kode_dept)) {
+            $query->where('karyawan.kode_dept', $request->kode_dept);
+        }
+        if (!empty($request->cari)) {
+            $query->where(function ($q) use ($request) {
+                $q->where('karyawan.nama_lengkap', 'like', '%' . $request->cari . '%')
+                  ->orWhere('karyawan.nik', 'like', '%' . $request->cari . '%')
+                  ->orWhere('karyawan.jabatan', 'like', '%' . $request->cari . '%');
+            });
+        }
+
+        // Urutkan yang sudah absen/hadir di bagian atas (berdasarkan jam_in terbaru), lalu sisanya abjad nama
+        $presensiHariIni = $query
+            ->orderByRaw('CASE WHEN datapresensi.id IS NOT NULL THEN 0 ELSE 1 END ASC')
+            ->orderBy('datapresensi.jam_in', 'desc')
+            ->orderBy('karyawan.nama_lengkap', 'asc')
+            ->get();
+
+        $totalKaryawan = DB::table('karyawan')->count();
+        $pendingIzinCount = DB::table('pengajuan_izin')->where('status_approved', 0)->count();
+        $cabang = DB::table('cabang')->orderBy('kode_cabang')->get();
+        $departemen = DB::table('departemen')->orderBy('kode_dept')->get();
+
+        return view('dashboard.dashboardadmin', compact(
+            'rekappresensi',
+            'presensiHariIni',
+            'hariini',
+            'totalKaryawan',
+            'pendingIzinCount',
+            'cabang',
+            'departemen'
+        ));
     }
 }

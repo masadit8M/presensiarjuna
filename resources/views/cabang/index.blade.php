@@ -50,8 +50,11 @@
                         <div class="row mt-2">
                             <div class="col-12">
                                 <form action="/cabang" method="GET">
-                                    <div class="row">
-                                        <div class="col-10">
+                                    <div class="row g-2">
+                                        <div class="col-md-5 col-12">
+                                            <input type="text" name="nama_cabang" class="form-control" placeholder="Cari Nama / Kode Cabang..." value="{{ Request('nama_cabang') }}">
+                                        </div>
+                                        <div class="col-md-5 col-12">
                                             <select name="kode_cabang" class="form-select" id="kode_cabang">
                                                 <option value="">Semua Cabang</option>
                                                 @if (isset($all_cabang))
@@ -63,9 +66,9 @@
                                                 @endif
                                             </select>
                                         </div>
-                                        <div class="col-2">
+                                        <div class="col-md-2 col-12">
                                             <div class="form-group">
-                                                <button type="submit" class="btn btn-primary">
+                                                <button type="submit" class="btn btn-primary w-100">
                                                     <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-search" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
                                                         <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
                                                         <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>

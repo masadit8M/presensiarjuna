@@ -154,23 +154,71 @@
             <div class="nav-item dropdown">
                 <a href="#" class="nav-link d-flex lh-1 text-reset p-0" data-bs-toggle="dropdown"
                     aria-label="Open user menu">
-                    <span class="avatar avatar-sm" style="background-image: url(./static/avatars/000m.jpg)"></span>
+                    <span class="avatar avatar-sm bg-primary-lt fw-bold">{{ strtoupper(substr(Auth::guard('user')->user()->name ?? 'A', 0, 2)) }}</span>
                     <div class="d-none d-xl-block ps-2">
                         <div>{{ Auth::guard('user')->user()->name }} </div>
                         <div class="mt-1 small text-muted">
-                            {{ ucwords(Auth::guard('user')->user()->roles->pluck('name')[0]) }}
+                            {{ ucwords(Auth::guard('user')->user()->roles->pluck('name')[0] ?? 'Admin') }}
                         </div>
                     </div>
                 </a>
                 <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
-                    <a href="./settings.html" class="dropdown-item">Settings</a>
-                    <a href="/proseslogoutadmin" class="dropdown-item">Logout</a>
+                    <a href="{{ url('/konfigurasi/users') }}" class="dropdown-item">Pengaturan User</a>
+                    <a href="{{ url('/proseslogoutadmin') }}" class="dropdown-item">Logout</a>
                 </div>
             </div>
         </div>
+        @php
+            $currentPath = request()->path();
+            $searchAction = url('/karyawan');
+            $searchParam = 'nama_karyawan';
+            $searchPlaceholder = 'Cari karyawan, presensi, atau menu…';
+
+            if (str_contains($currentPath, 'dashboardadmin')) {
+                $searchAction = url('/panel/dashboardadmin');
+                $searchParam = 'cari';
+                $searchPlaceholder = 'Cari nama / NIK karyawan di dashboard…';
+            } elseif (str_contains($currentPath, 'presensi/monitoring')) {
+                $searchAction = url('/presensi/monitoring');
+                $searchParam = 'nama_karyawan';
+                $searchPlaceholder = 'Cari nama / NIK di monitoring presensi…';
+            } elseif (str_contains($currentPath, 'presensi/izinsakit')) {
+                $searchAction = url('/presensi/izinsakit');
+                $searchParam = 'nama_lengkap';
+                $searchPlaceholder = 'Cari nama karyawan izin/sakit…';
+            } elseif (str_contains($currentPath, 'departemen')) {
+                $searchAction = url('/departemen');
+                $searchParam = 'nama_dept';
+                $searchPlaceholder = 'Cari nama departemen…';
+            } elseif (str_contains($currentPath, 'cabang')) {
+                $searchAction = url('/cabang');
+                $searchParam = 'nama_cabang';
+                $searchPlaceholder = 'Cari nama cabang…';
+            } elseif (str_contains($currentPath, 'konfigurasi/users')) {
+                $searchAction = url('/konfigurasi/users');
+                $searchParam = 'name';
+                $searchPlaceholder = 'Cari nama user…';
+            } elseif (str_contains($currentPath, 'konfigurasi/harilibur')) {
+                $searchAction = url('/konfigurasi/harilibur');
+                $searchParam = 'keterangan';
+                $searchPlaceholder = 'Cari keterangan / kode libur…';
+            } elseif (str_contains($currentPath, 'gaji/master')) {
+                $searchAction = url('/gaji/master');
+                $searchParam = 'cari';
+                $searchPlaceholder = 'Cari nama / NIK di master gaji…';
+            } elseif (str_contains($currentPath, 'gaji/periode/')) {
+                $searchAction = url($currentPath);
+                $searchParam = 'cari';
+                $searchPlaceholder = 'Cari nama / NIK di slip gaji…';
+            } elseif (str_contains($currentPath, 'karyawan')) {
+                $searchAction = url('/karyawan');
+                $searchParam = 'nama_karyawan';
+                $searchPlaceholder = 'Cari nama karyawan…';
+            }
+        @endphp
         <div class="collapse navbar-collapse" id="navbar-menu">
             <div>
-                <form action="/karyawan" method="get" autocomplete="off" novalidate>
+                <form action="{{ $searchAction }}" method="get" autocomplete="off" novalidate id="globalNavbarSearchForm">
                     <div class="input-icon">
                         <span class="input-icon-addon">
                             <!-- Download SVG icon from http://tabler-icons.io/i/search -->
@@ -182,11 +230,50 @@
                                 <path d="M21 21l-6 -6" />
                             </svg>
                         </span>
-                        <input type="text" name="nama_karyawan" value="{{ Request('nama_karyawan') }}" class="form-control" placeholder="Search…"
+                        <input type="text" id="globalNavbarSearchInput" name="{{ $searchParam }}" value="{{ request($searchParam) }}" class="form-control" placeholder="{{ $searchPlaceholder }}"
                             aria-label="Search in website">
                     </div>
                 </form>
             </div>
+            <script>
+                document.addEventListener('DOMContentLoaded', function() {
+                    var globalInput = document.getElementById('globalNavbarSearchInput');
+                    var globalForm = document.getElementById('globalNavbarSearchForm');
+                    if (!globalInput) return;
+
+                    globalInput.addEventListener('input', function() {
+                        var val = this.value;
+                        // Sync with in-page search inputs if present
+                        var dashSearch = document.getElementById('searchKaryawanDashboard');
+                        if (dashSearch) {
+                            dashSearch.value = val;
+                            dashSearch.dispatchEvent(new Event('keyup'));
+                        }
+                        var monSearch = document.getElementById('nama_karyawan');
+                        if (monSearch && window.location.pathname.indexOf('/presensi/monitoring') !== -1) {
+                            monSearch.value = val;
+                            if (window.jQuery) {
+                                window.jQuery(monSearch).trigger('keyup');
+                            }
+                        }
+                    });
+
+                    if (globalForm) {
+                        globalForm.addEventListener('submit', function(e) {
+                            if (window.location.pathname.indexOf('/presensi/monitoring') !== -1) {
+                                var monSearch = document.getElementById('nama_karyawan');
+                                if (monSearch) {
+                                    e.preventDefault();
+                                    monSearch.value = globalInput.value;
+                                    if (window.jQuery) {
+                                        window.jQuery(monSearch).trigger('keyup');
+                                    }
+                                }
+                            }
+                        });
+                    }
+                });
+            </script>
         </div>
     </div>
 </header>

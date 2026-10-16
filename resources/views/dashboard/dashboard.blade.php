@@ -76,7 +76,10 @@
                     </div>
                     <div class="item-menu text-center">
                         <div class="menu-icon">
-                            <a href="" class="orange" style="font-size: 40px;">
+                            @php
+                                $lokCabang = !empty($cabang->lokasi_cabang) ? 'https://www.google.com/maps?q=' . urlencode($cabang->lokasi_cabang) : url('/presensi/create');
+                            @endphp
+                            <a href="{{ $lokCabang }}" target="_blank" class="orange" style="font-size: 40px;" title="Lokasi Cabang {{ $cabang->nama_cabang ?? '' }} (Radius {{ $cabang->radius_cabang ?? 0 }}m)">
                                 <ion-icon name="location"></ion-icon>
                             </a>
                         </div>

@@ -231,7 +231,7 @@
                                             Izin
                                         @elseif ($d->status == 's')
                                             Sakit
-                                        @elseif ($d->status = 'c')
+                                        @elseif ($d->status == 'c')
                                             Cuti
                                         @endif
                                     </td>

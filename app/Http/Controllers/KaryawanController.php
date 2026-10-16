@@ -105,6 +105,15 @@ class KaryawanController extends Controller
                 if ($request->hasFile('foto')) {
                     $folderPath = "public/uploads/karyawan/";
                     $request->file('foto')->storeAs($folderPath, $foto);
+                    try {
+                        $src = storage_path('app/public/uploads/karyawan/' . $foto);
+                        if (is_file($src)) {
+                            foreach ([public_path('storage/uploads/karyawan'), public_path('uploads/karyawan')] as $destDir) {
+                                if (!is_dir($destDir)) @mkdir($destDir, 0755, true);
+                                @copy($src, $destDir . DIRECTORY_SEPARATOR . $foto);
+                            }
+                        }
+                    } catch (\Throwable $ex) {}
                 }
 
                 // Simpan atau sinkronkan komponen Master Gaji Karyawan
@@ -253,11 +262,29 @@ class KaryawanController extends Controller
             // update() mengembalikan jumlah baris yang BERUBAH (0 jika data karyawan sama persis),
             // sehingga jangan dipakai sebagai penanda gagal. Kegagalan sebenarnya ditangani lewat catch.
             if ($update !== false) {
+                if ($nik !== $nik_baru && !empty($nik_baru)) {
+                    foreach (['presensi', 'pengajuan_izin', 'konfigurasi_jamkerja', 'konfigurasi_jamkerja_by_date', 'gaji_master', 'penggajian_detail', 'harilibur_detail', 'koreksipresensi'] as $relTable) {
+                        try {
+                            DB::table($relTable)->where('nik', $nik)->update(['nik' => $nik_baru]);
+                        } catch (\Throwable $ex) {}
+                    }
+                }
+
                 if ($request->hasFile('foto')) {
                     $folderPath = "public/uploads/karyawan/";
-                    $folderPathOld = "public/uploads/karyawan/" . $old_foto;
-                    Storage::delete($folderPathOld);
+                    if (!empty($old_foto)) {
+                        Storage::delete("public/uploads/karyawan/" . $old_foto);
+                    }
                     $request->file('foto')->storeAs($folderPath, $foto);
+                    try {
+                        $src = storage_path('app/public/uploads/karyawan/' . $foto);
+                        if (is_file($src)) {
+                            foreach ([public_path('storage/uploads/karyawan'), public_path('uploads/karyawan')] as $destDir) {
+                                if (!is_dir($destDir)) @mkdir($destDir, 0755, true);
+                                @copy($src, $destDir . DIRECTORY_SEPARATOR . $foto);
+                            }
+                        }
+                    } catch (\Throwable $ex) {}
                 }
 
                 // Update / simpan pengaturan master gaji jika ada di form
