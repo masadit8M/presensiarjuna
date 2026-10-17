@@ -150,6 +150,68 @@
             </div>
         </div>
 
+        <!-- Layanan Mandiri Guru & Karyawan (Integrasi Fitur Aku Hadir) -->
+        <div class="card mt-2 mb-2" style="border-radius: 14px; border: 1px solid rgba(37,99,235,0.15); box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+            <div class="card-body py-2 px-2">
+                <div class="row text-center">
+                    <div class="col-3 px-1">
+                        <a href="/presensi/slipgaji" style="text-decoration: none; color: #1e293b; display: block; padding: 6px 2px;">
+                            <div style="width: 42px; height: 42px; margin: 0 auto 4px; border-radius: 12px; background: #dcfce7; color: #16a34a; display: flex; align-items: center; justify-content: center; font-size: 22px;">
+                                <ion-icon name="receipt-outline"></ion-icon>
+                            </div>
+                            <span style="font-size: 0.72rem; font-weight: 600; display: block; line-height: 1.1;">Slip Gaji</span>
+                        </a>
+                    </div>
+                    <div class="col-3 px-1">
+                        <a href="/presensi/pinjaman" style="text-decoration: none; color: #1e293b; display: block; padding: 6px 2px;">
+                            <div style="width: 42px; height: 42px; margin: 0 auto 4px; border-radius: 12px; background: #ccfbf1; color: #0d9488; display: flex; align-items: center; justify-content: center; font-size: 22px;">
+                                <ion-icon name="wallet-outline"></ion-icon>
+                            </div>
+                            <span style="font-size: 0.72rem; font-weight: 600; display: block; line-height: 1.1;">Kasbon</span>
+                        </a>
+                    </div>
+                    <div class="col-3 px-1">
+                        <a href="/presensi/pengumuman" style="text-decoration: none; color: #1e293b; display: block; padding: 6px 2px; position: relative;">
+                            @if (isset($belumDibacaCount) && $belumDibacaCount > 0)
+                                <span class="badge badge-danger" style="position: absolute; top: 2px; right: 12px; font-size: 0.6rem; z-index: 5;">{{ $belumDibacaCount }}</span>
+                            @endif
+                            <div style="width: 42px; height: 42px; margin: 0 auto 4px; border-radius: 12px; background: #dbeafe; color: #2563eb; display: flex; align-items: center; justify-content: center; font-size: 22px;">
+                                <ion-icon name="megaphone-outline"></ion-icon>
+                            </div>
+                            <span style="font-size: 0.72rem; font-weight: 600; display: block; line-height: 1.1;">Pengumuman</span>
+                        </a>
+                    </div>
+                    <div class="col-3 px-1">
+                        <a href="/presensi/kendala" style="text-decoration: none; color: #1e293b; display: block; padding: 6px 2px;">
+                            <div style="width: 42px; height: 42px; margin: 0 auto 4px; border-radius: 12px; background: #fef3c7; color: #d97706; display: flex; align-items: center; justify-content: center; font-size: 22px;">
+                                <ion-icon name="help-buoy-outline"></ion-icon>
+                            </div>
+                            <span style="font-size: 0.72rem; font-weight: 600; display: block; line-height: 1.1;">Lapor Absen</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (isset($pengumumanTerbaru) && $pengumumanTerbaru->isNotEmpty())
+            <div class="card mb-2" style="border-radius: 12px; border-left: 4px solid #2563eb; background: #eff6ff;">
+                <div class="card-body py-2 px-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span style="font-size: 0.75rem; font-weight: 700; color: #1d4ed8;">
+                            <ion-icon name="megaphone" style="vertical-align: middle;"></ion-icon> INFO YAYASAN TERBARU
+                        </span>
+                        <a href="/presensi/pengumuman" style="font-size: 0.72rem; font-weight: 600; color: #2563eb;">Semua &raquo;</a>
+                    </div>
+                    @foreach ($pengumumanTerbaru as $info)
+                        <a href="/presensi/pengumuman/{{ $info->id }}" style="display: block; text-decoration: none; color: #1e293b; padding: 3px 0; border-top: {{ !$loop->first ? '1px dashed #bfdbfe' : 'none' }};">
+                            <div style="font-size: 0.8rem; font-weight: 600;">{{ $info->judul }}</div>
+                            <div style="font-size: 0.72rem; color: #475569;">{{ \Illuminate\Support\Str::limit(strip_tags($info->isi), 75) }}</div>
+                        </a>
+                    @endforeach
+                </div>
+            </div>
+        @endif
+
         <div id="rekappresensi">
             <h3>Rekap Presensi Bulan {{ $namabulan[$bulanini] }} Tahun {{ $tahunini }}</h3>
             <div class="row">

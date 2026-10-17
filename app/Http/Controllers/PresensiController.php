@@ -1157,8 +1157,9 @@ class PresensiController extends Controller
         $kode_jam_kerja = $status == "a" ? NULL : $request->kode_jam_kerja;
 
         try {
+            $existing = DB::table('presensi')->where('nik', $nik)->where('tgl_presensi', $tanggal)->first();
+            $cekpresensi = $existing ? 1 : 0;
 
-            $cekpresensi = DB::table('presensi')->where('nik', $nik)->where('tgl_presensi', $tanggal)->count();
             if ($cekpresensi > 0) {
                 DB::table('presensi')
                     ->where('nik', $nik)
@@ -1181,10 +1182,39 @@ class PresensiController extends Controller
             }
 
             try {
+                \App\Services\FiturTambahanSchemaService::ensureTablesExist();
+                $adminUser = Auth::guard('user')->user();
+                $sebelum = $existing ? json_encode([
+                    'jam_in' => $existing->jam_in,
+                    'jam_out' => $existing->jam_out,
+                    'kode_jam_kerja' => $existing->kode_jam_kerja,
+                    'status' => $existing->status,
+                ]) : 'Belum ada presensi';
+                $sesudah = json_encode([
+                    'jam_in' => $jam_in,
+                    'jam_out' => $jam_out,
+                    'kode_jam_kerja' => $kode_jam_kerja,
+                    'status' => $status,
+                ]);
+                DB::table('revisi_absensi')->insert([
+                    'nik' => $nik,
+                    'tgl_presensi' => $tanggal,
+                    'jenis_tindakan' => $existing ? 'update_data' : 'insert_manual',
+                    'user_id_eksekutor' => $adminUser ? $adminUser->id : null,
+                    'nama_eksekutor' => $adminUser ? $adminUser->name : 'Admin',
+                    'alasan' => $request->alasan ?: 'Koreksi Presensi Manual via Monitoring',
+                    'data_sebelumnya' => $sebelum,
+                    'data_perubahan' => $sesudah,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            } catch (\Throwable $e) {}
+
+            try {
                 GajiController::syncAttendanceByDate($tanggal);
             } catch (\Throwable $e) {}
 
-            return Redirect::back()->with(['success' => 'Data Berhasil Disimpan & Disinkronkan ke Periode Gaji']);
+            return Redirect::back()->with(['success' => 'Data Berhasil Disimpan, Tercatat di Log Audit & Disinkronkan ke Periode Gaji']);
         } catch (\Exception $e) {
             return Redirect::back()->with(['warning' => 'Data Gagal Disimpan']);
         }

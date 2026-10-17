@@ -11,7 +11,10 @@ use App\Http\Controllers\IzinabsenController;
 use App\Http\Controllers\IzincutiController;
 use App\Http\Controllers\IzinsakitController;
 use App\Http\Controllers\KaryawanController;
+use App\Http\Controllers\KendalaController;
 use App\Http\Controllers\KonfigurasiController;
+use App\Http\Controllers\PengumumanController;
+use App\Http\Controllers\PinjamanController;
 use App\Http\Controllers\PresensiController;
 use App\Http\Controllers\UserController;
 use App\Models\Karyawan;
@@ -92,6 +95,29 @@ Route::get('/uploads/absensi/{filename}', function ($filename) {
     abort(404);
 });
 
+Route::get('/uploads/{folder}/{filename}', function ($folder, $filename) {
+    if (!in_array($folder, ['pengumuman', 'kendala'])) {
+        abort(404);
+    }
+    $candidates = [
+        public_path('uploads/' . $folder . '/' . $filename),
+        storage_path('app/public/uploads/' . $folder . '/' . $filename),
+        base_path('public_html/uploads/' . $folder . '/' . $filename),
+    ];
+    foreach ($candidates as $candidate) {
+        if (file_exists($candidate) && is_file($candidate)) {
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mime = finfo_file($finfo, $candidate) ?: 'application/octet-stream';
+            finfo_close($finfo);
+            return response()->file($candidate, [
+                'Content-Type' => $mime,
+                'Cache-Control' => 'public, max-age=86400',
+            ]);
+        }
+    }
+    abort(404);
+});
+
 Route::middleware(['guest:karyawan'])->group(function () {
     Route::get('/', function () {
         return view('auth.login');
@@ -153,6 +179,21 @@ Route::middleware(['auth:karyawan'])->group(function () {
 
     Route::get('/izin/{kode_izin}/showact', [PresensiController::class, 'showact']);
     Route::get('/izin/{kode_izin}/delete', [PresensiController::class, 'deleteizin']);
+
+    // Slip Gaji & Pinjaman/Kasbon Mandiri (Guru/Karyawan Mobile)
+    Route::get('/presensi/slipgaji', [GajiController::class, 'slipGajiKaryawan']);
+    Route::get('/presensi/slipgaji/{id}/cetak', [GajiController::class, 'cetakSlipKaryawan']);
+    Route::get('/presensi/slipgaji/{id}/download', [GajiController::class, 'downloadSlipKaryawan']);
+    Route::get('/presensi/pinjaman', [PinjamanController::class, 'karyawanIndex']);
+
+    // Papan Pengumuman Yayasan (Guru/Karyawan Mobile)
+    Route::get('/presensi/pengumuman', [PengumumanController::class, 'karyawanIndex']);
+    Route::get('/presensi/pengumuman/{id}', [PengumumanController::class, 'karyawanShow']);
+
+    // Lapor Kendala Absen Mandiri (Guru/Karyawan Mobile)
+    Route::get('/presensi/kendala', [KendalaController::class, 'karyawanIndex']);
+    Route::get('/presensi/kendala/create', [KendalaController::class, 'karyawanCreate']);
+    Route::post('/presensi/kendala/store', [KendalaController::class, 'karyawanStore']);
 });
 
 
@@ -186,6 +227,11 @@ Route::group(['middleware' => ['role:administrator|admin departemen,user']], fun
     Route::post('/koreksipresensi', [PresensiController::class, 'koreksipresensi']);
     Route::post('/storekoreksipresensi', [PresensiController::class, 'storekoreksipresensi']);
 
+    // Tiket Kendala Absen & Log Audit Koreksi Presensi (Admin)
+    Route::get('/presensi/kendala-absen', [KendalaController::class, 'adminIndex']);
+    Route::post('/presensi/kendala-absen/{id}/proses', [KendalaController::class, 'adminProses']);
+    Route::get('/presensi/log-koreksi', [KendalaController::class, 'logKoreksi']);
+
     // Penggajian & Slip Gaji
     Route::get('/gaji', [GajiController::class, 'index']);
     Route::post('/gaji/storeperiode', [GajiController::class, 'storePeriode']);
@@ -205,6 +251,21 @@ Route::group(['middleware' => ['role:administrator|admin departemen,user']], fun
     Route::get('/gaji/master/sync-excel', [GajiController::class, 'syncMasterExcel']);
     Route::get('/gaji/master', [GajiController::class, 'master']);
     Route::post('/gaji/master/{nik}/update', [GajiController::class, 'updateMaster']);
+
+    // Modul Pinjaman / Kasbon & Cicilan (Admin)
+    Route::get('/pinjaman', [PinjamanController::class, 'index']);
+    Route::post('/pinjaman/store', [PinjamanController::class, 'store']);
+    Route::get('/pinjaman/{id}', [PinjamanController::class, 'show']);
+    Route::post('/pinjaman/{id}/angsuran', [PinjamanController::class, 'storeAngsuran']);
+    Route::post('/pinjaman/angsuran/{id}/delete', [PinjamanController::class, 'deleteAngsuran']);
+    Route::post('/pinjaman/{id}/delete', [PinjamanController::class, 'destroy']);
+
+    // Papan Pengumuman Yayasan (Admin)
+    Route::get('/pengumuman', [PengumumanController::class, 'index']);
+    Route::post('/pengumuman/store', [PengumumanController::class, 'store']);
+    Route::get('/pengumuman/{id}', [PengumumanController::class, 'show']);
+    Route::post('/pengumuman/{id}/update', [PengumumanController::class, 'update']);
+    Route::post('/pengumuman/{id}/delete', [PengumumanController::class, 'destroy']);
 });
 
 

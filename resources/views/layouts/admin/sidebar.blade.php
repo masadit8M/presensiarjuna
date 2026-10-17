@@ -145,10 +145,39 @@
                         </span>
                     </a>
                 </li>
+                @php
+                    $pendingKendalaCount = 0;
+                    try {
+                        \App\Services\FiturTambahanSchemaService::ensureTablesExist();
+                        $pendingKendalaCount = \Illuminate\Support\Facades\DB::table('pengajuan_masalah')->where('status', 'diajukan')->count();
+                    } catch (\Throwable $e) {}
+                @endphp
+                <li class="nav-item">
+                    <a class="nav-link {{ request()->is(['presensi/kendala-absen', 'presensi/log-koreksi']) ? 'active' : '' }}"
+                        href="/presensi/kendala-absen">
+                        <span class="nav-link-icon d-md-none d-lg-inline-block">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-lifebuoy" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                                <path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" />
+                                <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" />
+                                <path d="M15 15l3.35 3.35" />
+                                <path d="M9 15l-3.35 3.35" />
+                                <path d="M5.65 5.65l3.35 3.35" />
+                                <path d="M18.35 5.65l-3.35 3.35" />
+                            </svg>
+                        </span>
+                        <span class="nav-link-title">
+                            Kendala & Audit Absen
+                            @if ($pendingKendalaCount > 0)
+                                <span class="badge bg-red text-white ms-1">{{ $pendingKendalaCount }}</span>
+                            @endif
+                        </span>
+                    </a>
+                </li>
                 <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle {{ request()->is(['presensi/laporan', 'presensi/rekap']) ? 'show' : '' }}"
+                    <a class="nav-link dropdown-toggle {{ request()->is(['presensi/laporan', 'presensi/rekap', 'presensi/log-koreksi']) ? 'show' : '' }}"
                         href="#navbar-base" data-bs-toggle="dropdown" data-bs-auto-close="false" role="button"
-                        aria-expanded="{{ request()->is(['presensi/laporan', 'presensi/rekap']) ? 'true' : '' }}">
+                        aria-expanded="{{ request()->is(['presensi/laporan', 'presensi/rekap', 'presensi/log-koreksi']) ? 'true' : '' }}">
                         <span class="nav-link-icon d-md-none d-lg-inline-block">
                             <!-- Download SVG icon from http://tabler-icons.io/i/package -->
                             <svg xmlns="http://www.w3.org/2000/svg"
@@ -167,7 +196,7 @@
                         </span>
                     </a>
                     <div
-                        class="dropdown-menu {{ request()->is(['presensi/laporan', 'presensi/rekap']) ? 'show' : '' }}">
+                        class="dropdown-menu {{ request()->is(['presensi/laporan', 'presensi/rekap', 'presensi/log-koreksi']) ? 'show' : '' }}">
                         <div class="dropdown-menu-columns">
                             <div class="dropdown-menu-column">
                                 <a class="dropdown-item {{ request()->is(['presensi/laporan']) ? 'active' : '' }}"
@@ -178,14 +207,18 @@
                                     href="/presensi/rekap">
                                     Rekap Presensi
                                 </a>
+                                <a class="dropdown-item {{ request()->is(['presensi/log-koreksi']) ? 'active' : '' }}"
+                                    href="/presensi/log-koreksi">
+                                    Log Audit Koreksi Presensi
+                                </a>
                             </div>
                         </div>
                     </div>
                 </li>
                 <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle {{ request()->is(['gaji', 'gaji/*']) ? 'show' : '' }}"
+                    <a class="nav-link dropdown-toggle {{ request()->is(['gaji', 'gaji/*', 'pinjaman', 'pinjaman/*']) ? 'show' : '' }}"
                         href="#navbar-base" data-bs-toggle="dropdown" data-bs-auto-close="false" role="button"
-                        aria-expanded="{{ request()->is(['gaji', 'gaji/*']) ? 'true' : '' }}">
+                        aria-expanded="{{ request()->is(['gaji', 'gaji/*', 'pinjaman', 'pinjaman/*']) ? 'true' : '' }}">
                         <span class="nav-link-icon d-md-none d-lg-inline-block">
                             <!-- SVG icon for cash / receipt / payroll -->
                             <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-receipt-2" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
@@ -198,7 +231,7 @@
                             Gaji & Slip Gaji
                         </span>
                     </a>
-                    <div class="dropdown-menu {{ request()->is(['gaji', 'gaji/*']) ? 'show' : '' }}">
+                    <div class="dropdown-menu {{ request()->is(['gaji', 'gaji/*', 'pinjaman', 'pinjaman/*']) ? 'show' : '' }}">
                         <div class="dropdown-menu-columns">
                             <div class="dropdown-menu-column">
                                 <a class="dropdown-item {{ request()->is(['gaji', 'gaji/periode/*']) ? 'active' : '' }}"
@@ -209,9 +242,29 @@
                                     href="/gaji/master">
                                     Master Gaji Karyawan
                                 </a>
+                                <a class="dropdown-item {{ request()->is(['pinjaman', 'pinjaman/*']) ? 'active' : '' }}"
+                                    href="/pinjaman">
+                                    Pinjaman / Kasbon Guru
+                                </a>
                             </div>
                         </div>
                     </div>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {{ request()->is(['pengumuman', 'pengumuman/*']) ? 'active' : '' }}"
+                        href="/pengumuman">
+                        <span class="nav-link-icon d-md-none d-lg-inline-block">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-speakerphone" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                                <path d="M18 8a3 3 0 0 1 0 6" />
+                                <path d="M10 8v11a1 1 0 0 1 -1 1h-1a1 1 0 0 1 -1 -1v-5" />
+                                <path d="M12 8h0l4.524 -3.77a.9 .9 0 0 1 1.476 .692v12.156a.9 .9 0 0 1 -1.476 .692l-4.524 -3.77h-8a1 1 0 0 1 -1 -1v-4a1 1 0 0 1 1 -1h8" />
+                            </svg>
+                        </span>
+                        <span class="nav-link-title">
+                            Pengumuman Yayasan
+                        </span>
+                    </a>
                 </li>
                 @role('administrator', 'user')
                     <li class="nav-item dropdown">

@@ -80,7 +80,47 @@ class DashboardController extends Controller
         $cabang = DB::table('cabang')->where('kode_cabang', $kode_cabang)->first();
         $departemen = DB::table('departemen')->where('kode_dept', $kode_dept)->first();
 
-        return view('dashboard.dashboard', compact('presensihariini', 'historibulanini', 'namabulan', 'bulanini', 'tahunini', 'rekappresensi', 'leaderboard', 'cabang', 'departemen'));
+        $pengumumanTerbaru = collect();
+        $belumDibacaCount = 0;
+        try {
+            \App\Services\FiturTambahanSchemaService::ensureTablesExist();
+            $allNiks = \App\Services\FiturTambahanSchemaService::getAllNiksForKaryawan($nik);
+            $activePengumuman = DB::table('pengumuman')
+                ->where('status_aktif', 1)
+                ->whereDate('tanggal_tayang', '<=', $hariini)
+                ->where(function ($q) use ($hariini) {
+                    $q->whereNull('tanggal_berakhir')
+                        ->orWhereDate('tanggal_berakhir', '>=', $hariini);
+                })
+                ->orderByRaw("CASE WHEN prioritas = 'tinggi' THEN 0 WHEN prioritas = 'normal' THEN 1 ELSE 2 END")
+                ->orderBy('tanggal_tayang', 'desc')
+                ->orderBy('id', 'desc')
+                ->get();
+
+            $dibacaIds = DB::table('pengumuman_pegawai')
+                ->whereIn('nik', $allNiks)
+                ->where('is_dibaca', 1)
+                ->pluck('pengumuman_id')
+                ->toArray();
+
+            $belumDibacaCount = $activePengumuman->whereNotIn('id', $dibacaIds)->count();
+            $pengumumanTerbaru = $activePengumuman->take(3);
+        } catch (\Throwable $e) {
+        }
+
+        return view('dashboard.dashboard', compact(
+            'presensihariini',
+            'historibulanini',
+            'namabulan',
+            'bulanini',
+            'tahunini',
+            'rekappresensi',
+            'leaderboard',
+            'cabang',
+            'departemen',
+            'pengumumanTerbaru',
+            'belumDibacaCount'
+        ));
     }
 
     public function dashboardadmin(Request $request)

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Karyawan;
 use App\Models\User;
+use App\Services\FiturTambahanSchemaService;
 use App\Services\SlipPdfService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -559,6 +560,14 @@ class GajiController extends Controller
                 }
 
                 $potonganKasbon = $existingSlip ? ($existingSlip->potongan_kasbon ?? 0) : ($master ? ($master->potongan_kasbon ?? 0) : 0);
+                $ketPotonganKasbon = $existingSlip ? $existingSlip->ket_potongan_kasbon : ($master->ket_potongan_kasbon ?? null);
+                if ($potonganKasbon <= 0) {
+                    $kasbonAuto = FiturTambahanSchemaService::getActiveKasbonInstallment($personNiks, substr($tglSelesai, 0, 7));
+                    if ($kasbonAuto['nominal'] > 0) {
+                        $potonganKasbon = $kasbonAuto['nominal'];
+                        $ketPotonganKasbon = $kasbonAuto['keterangan'];
+                    }
+                }
                 $potonganBpjs = $existingSlip ? ($existingSlip->potongan_bpjs ?? 0) : ($master ? (($master->bpjs_kesehatan ?? 0) + ($master->bpjs_ketenagakerjaan ?? 0)) : 0);
                 $potonganLainnya = $existingSlip ? ($existingSlip->potongan_lainnya ?? 0) : ($master ? ($master->potongan_lainnya ?? 0) : 0);
 
@@ -626,7 +635,7 @@ class GajiController extends Controller
                     'potongan_absen' => $potonganAbsen,
                     'potongan_terlambat' => $potonganTerlambat,
                     'potongan_kasbon' => $potonganKasbon,
-                    'ket_potongan_kasbon' => $existingSlip ? $existingSlip->ket_potongan_kasbon : ($master->ket_potongan_kasbon ?? null),
+                    'ket_potongan_kasbon' => $ketPotonganKasbon,
                     'potongan_bpjs' => $potonganBpjs,
                     'potongan_lainnya' => $potonganLainnya,
                     'ket_potongan_lainnya' => $existingSlip ? $existingSlip->ket_potongan_lainnya : ($master->ket_potongan_lainnya ?? null),
@@ -860,6 +869,14 @@ class GajiController extends Controller
             }
 
             $potonganKasbon = $master ? ($master->potongan_kasbon ?? 0) : 0;
+            $ketPotonganKasbon = $master->ket_potongan_kasbon ?? null;
+            if ($potonganKasbon <= 0) {
+                $kasbonAuto = FiturTambahanSchemaService::getActiveKasbonInstallment($personNiks, substr($tglSelesai, 0, 7));
+                if ($kasbonAuto['nominal'] > 0) {
+                    $potonganKasbon = $kasbonAuto['nominal'];
+                    $ketPotonganKasbon = $kasbonAuto['keterangan'];
+                }
+            }
             $potonganBpjs = $master ? (($master->bpjs_kesehatan ?? 0) + ($master->bpjs_ketenagakerjaan ?? 0)) : 0;
             $potonganLainnya = $master ? ($master->potongan_lainnya ?? 0) : 0;
 
@@ -924,7 +941,7 @@ class GajiController extends Controller
                 'potongan_absen' => $potonganAbsen,
                 'potongan_terlambat' => $potonganTerlambat,
                 'potongan_kasbon' => $potonganKasbon,
-                'ket_potongan_kasbon' => $master->ket_potongan_kasbon ?? null,
+                'ket_potongan_kasbon' => $ketPotonganKasbon,
                 'potongan_bpjs' => $potonganBpjs,
                 'potongan_lainnya' => $potonganLainnya,
                 'ket_potongan_lainnya' => $master->ket_potongan_lainnya ?? null,
@@ -2443,4 +2460,112 @@ class GajiController extends Controller
 
         return redirect()->back()->with(['success' => 'Berhasil menyinkronkan standar gaji, tunjangan, dan potongan dari Master Gaji untuk ' . $updatedCount . ' slip karyawan! Presensi kehadiran tetap aman.']);
     }
+
+    /**
+     * Employee Mobile Portal: List all salary slips for the logged-in employee.
+     * Supports multi-branch NIK consolidation so teachers see their slips from any branch login.
+     */
+    public function slipGajiKaryawan()
+    {
+        $this->ensureTablesExist();
+        FiturTambahanSchemaService::ensureTablesExist();
+
+        $user = Auth::guard('karyawan')->user();
+        $allNiks = FiturTambahanSchemaService::getAllNiksForKaryawan($user->nik);
+
+        $slips = DB::table('penggajian_detail')
+            ->join('karyawan', 'penggajian_detail.nik', '=', 'karyawan.nik')
+            ->join('penggajian_periode', 'penggajian_detail.periode_id', '=', 'penggajian_periode.id')
+            ->leftJoin('cabang', 'penggajian_detail.kode_cabang', '=', 'cabang.kode_cabang')
+            ->whereIn('penggajian_detail.nik', $allNiks)
+            ->select(
+                'penggajian_detail.*',
+                'karyawan.nama_lengkap',
+                'penggajian_periode.nama_periode',
+                'penggajian_periode.tgl_mulai',
+                'penggajian_periode.tgl_selesai',
+                'penggajian_periode.status as status_periode',
+                'cabang.nama_cabang'
+            )
+            ->orderBy('penggajian_periode.tgl_selesai', 'desc')
+            ->orderBy('penggajian_detail.id', 'desc')
+            ->get();
+
+        $activeLoansCount = 0;
+        $totalSisaPinjaman = 0;
+        try {
+            $loans = DB::table('pinjaman_pegawai')
+                ->whereIn('nik', $allNiks)
+                ->where('status', 'berjalan')
+                ->get();
+            $activeLoansCount = $loans->count();
+            $totalSisaPinjaman = $loans->sum('sisa_pinjaman');
+        } catch (\Throwable $e) {
+        }
+
+        return view('gaji.karyawan_index', compact('slips', 'user', 'activeLoansCount', 'totalSisaPinjaman'));
+    }
+
+    /**
+     * Employee Mobile Portal: View/Print salary slip detail in browser.
+     */
+    public function cetakSlipKaryawan($id)
+    {
+        $this->ensureTablesExist();
+
+        $user = Auth::guard('karyawan')->user();
+        $allNiks = FiturTambahanSchemaService::getAllNiksForKaryawan($user->nik);
+
+        $detail = DB::table('penggajian_detail')
+            ->join('karyawan', 'penggajian_detail.nik', '=', 'karyawan.nik')
+            ->join('penggajian_periode', 'penggajian_detail.periode_id', '=', 'penggajian_periode.id')
+            ->leftJoin('cabang', 'penggajian_detail.kode_cabang', '=', 'cabang.kode_cabang')
+            ->where('penggajian_detail.id', $id)
+            ->whereIn('penggajian_detail.nik', $allNiks)
+            ->select('penggajian_detail.*', 'karyawan.nama_lengkap', 'penggajian_periode.nama_periode', 'penggajian_periode.tgl_selesai', 'cabang.nama_cabang')
+            ->first();
+
+        if (!$detail) {
+            return redirect('/presensi/slipgaji')->with(['warning' => 'Data slip gaji tidak ditemukan atau bukan milik Anda.']);
+        }
+
+        return view('gaji.cetak', compact('detail'));
+    }
+
+    /**
+     * Employee Mobile Portal: Download PDF salary slip directly to phone.
+     */
+    public function downloadSlipKaryawan($id)
+    {
+        $this->ensureTablesExist();
+
+        $user = Auth::guard('karyawan')->user();
+        $allNiks = FiturTambahanSchemaService::getAllNiksForKaryawan($user->nik);
+
+        $detail = DB::table('penggajian_detail')
+            ->join('karyawan', 'penggajian_detail.nik', '=', 'karyawan.nik')
+            ->join('penggajian_periode', 'penggajian_detail.periode_id', '=', 'penggajian_periode.id')
+            ->leftJoin('cabang', 'penggajian_detail.kode_cabang', '=', 'cabang.kode_cabang')
+            ->where('penggajian_detail.id', $id)
+            ->whereIn('penggajian_detail.nik', $allNiks)
+            ->select('penggajian_detail.*', 'karyawan.nama_lengkap', 'penggajian_periode.nama_periode', 'penggajian_periode.tgl_selesai', 'cabang.nama_cabang')
+            ->first();
+
+        if (!$detail) {
+            return redirect('/presensi/slipgaji')->with(['warning' => 'Data slip gaji tidak ditemukan atau bukan milik Anda.']);
+        }
+
+        $pdfRelPath = SlipPdfService::generatePdf($detail);
+        DB::table('penggajian_detail')->where('id', $id)->update([
+            'pdf_path' => $pdfRelPath,
+            'download_count' => ($detail->download_count ?? 0) + 1,
+            'download_at' => now(),
+        ]);
+
+        $fullPath = public_path($pdfRelPath);
+        $cleanName = 'Slip_Gaji_' . preg_replace('/[^A-Za-z0-9]/', '_', $detail->nama_lengkap) . '_' . preg_replace('/[^A-Za-z0-9]/', '_', $detail->nama_periode) . '.pdf';
+
+        return response()->download($fullPath, $cleanName);
+    }
 }
+

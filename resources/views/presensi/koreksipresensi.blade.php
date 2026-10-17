@@ -92,6 +92,15 @@
         </div>
     </div>
 
+    <div class="row mb-2">
+        <div class="col-12">
+            <div class="form-group">
+                <input type="text" name="alasan" class="form-control"
+                    placeholder="Alasan / Catatan Koreksi (Opsional, tercatat di Log Audit)">
+            </div>
+        </div>
+    </div>
+
     <div class="row">
         <div class="col-12">
             <div class="form-group">
