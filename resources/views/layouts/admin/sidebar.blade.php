@@ -234,14 +234,16 @@
                     <div class="dropdown-menu {{ request()->is(['gaji', 'gaji/*', 'pinjaman', 'pinjaman/*']) ? 'show' : '' }}">
                         <div class="dropdown-menu-columns">
                             <div class="dropdown-menu-column">
-                                <a class="dropdown-item {{ request()->is(['gaji', 'gaji/periode/*']) ? 'active' : '' }}"
-                                    href="/gaji">
-                                    Data Penggajian
-                                </a>
-                                <a class="dropdown-item {{ request()->is(['gaji/master']) ? 'active' : '' }}"
-                                    href="/gaji/master">
-                                    Master Gaji Karyawan
-                                </a>
+                                @if (\App\Http\Controllers\GajiController::isSuperAdmin())
+                                    <a class="dropdown-item {{ request()->is(['gaji', 'gaji/periode/*']) ? 'active' : '' }}"
+                                        href="/gaji">
+                                        Data Penggajian
+                                    </a>
+                                    <a class="dropdown-item {{ request()->is(['gaji/master']) ? 'active' : '' }}"
+                                        href="/gaji/master">
+                                        Master Gaji Karyawan
+                                    </a>
+                                @endif
                                 <a class="dropdown-item {{ request()->is(['pinjaman', 'pinjaman/*']) ? 'active' : '' }}"
                                     href="/pinjaman">
                                     Pinjaman / Kasbon Guru

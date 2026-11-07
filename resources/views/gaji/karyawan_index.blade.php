@@ -59,7 +59,7 @@
                     <ion-icon name="document-text-outline" style="font-size: 48px; color: #94a3b8;"></ion-icon>
                     <h4 class="mt-2 mb-1" style="font-weight: 600; color: #334155;">Belum Ada Slip Gaji</h4>
                     <p class="text-muted mb-0" style="font-size: 0.85rem;">
-                        Data slip gaji Anda akan tampil otomatis di sini setelah periode penggajian diterbitkan oleh Bendahara.
+                        Slip gaji Anda akan tampil di sini setelah slip dikirimkan kepada Anda oleh Bendahara / Superadmin.
                     </p>
                 </div>
             </div>

@@ -19,6 +19,48 @@ use Illuminate\Support\Str;
 class GajiController extends Controller
 {
     /**
+     * Satu-satunya akun admin yang boleh mengakses modul Penggajian / Slip Gaji / Master Gaji.
+     */
+    const SUPERADMIN_EMAIL = 'masaditfb@gmail.com';
+
+    /**
+     * Cek apakah admin yang sedang login (guard 'user') adalah Superadmin.
+     */
+    public static function isSuperAdmin(): bool
+    {
+        try {
+            $admin = Auth::guard('user')->user();
+            return $admin && strtolower(trim((string) $admin->email)) === self::SUPERADMIN_EMAIL;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Seluruh aksi admin (penggajian, master gaji, cetak, kirim WA, reset link) hanya untuk Superadmin.
+     * Pengecualian: link publik bertoken WhatsApp dan portal slip gaji mandiri karyawan
+     * (sudah dibatasi oleh NIK pemilik & status terkirim di method masing-masing).
+     */
+    public function __construct()
+    {
+        $this->middleware(function ($request, $next) {
+            if (!self::isSuperAdmin()) {
+                return redirect('/panel/dashboardadmin')->with([
+                    'warning' => 'Akses ditolak. Modul Gaji & Slip Gaji hanya dapat diakses oleh Superadmin.',
+                ]);
+            }
+            return $next($request);
+        })->except([
+            'viewPublicSlip',
+            'downloadPublicSlip',
+            'serveSlipFile',
+            'slipGajiKaryawan',
+            'cetakSlipKaryawan',
+            'downloadSlipKaryawan',
+        ]);
+    }
+
+    /**
      * Auto check and initialize database tables if they do not exist.
      * Guarantees zero downtime/crashes even without running manual artisan migrate.
      */
@@ -2478,6 +2520,7 @@ class GajiController extends Controller
             ->join('penggajian_periode', 'penggajian_detail.periode_id', '=', 'penggajian_periode.id')
             ->leftJoin('cabang', 'penggajian_detail.kode_cabang', '=', 'cabang.kode_cabang')
             ->whereIn('penggajian_detail.nik', $allNiks)
+            ->where('penggajian_detail.status_kirim_wa', 1)
             ->select(
                 'penggajian_detail.*',
                 'karyawan.nama_lengkap',
@@ -2522,11 +2565,12 @@ class GajiController extends Controller
             ->leftJoin('cabang', 'penggajian_detail.kode_cabang', '=', 'cabang.kode_cabang')
             ->where('penggajian_detail.id', $id)
             ->whereIn('penggajian_detail.nik', $allNiks)
+            ->where('penggajian_detail.status_kirim_wa', 1)
             ->select('penggajian_detail.*', 'karyawan.nama_lengkap', 'penggajian_periode.nama_periode', 'penggajian_periode.tgl_selesai', 'cabang.nama_cabang')
             ->first();
 
         if (!$detail) {
-            return redirect('/presensi/slipgaji')->with(['warning' => 'Data slip gaji tidak ditemukan atau bukan milik Anda.']);
+            return redirect('/presensi/slipgaji')->with(['warning' => 'Data slip gaji tidak ditemukan atau belum dikirimkan kepada Anda.']);
         }
 
         return view('gaji.cetak', compact('detail'));
@@ -2548,11 +2592,12 @@ class GajiController extends Controller
             ->leftJoin('cabang', 'penggajian_detail.kode_cabang', '=', 'cabang.kode_cabang')
             ->where('penggajian_detail.id', $id)
             ->whereIn('penggajian_detail.nik', $allNiks)
+            ->where('penggajian_detail.status_kirim_wa', 1)
             ->select('penggajian_detail.*', 'karyawan.nama_lengkap', 'penggajian_periode.nama_periode', 'penggajian_periode.tgl_selesai', 'cabang.nama_cabang')
             ->first();
 
         if (!$detail) {
-            return redirect('/presensi/slipgaji')->with(['warning' => 'Data slip gaji tidak ditemukan atau bukan milik Anda.']);
+            return redirect('/presensi/slipgaji')->with(['warning' => 'Data slip gaji tidak ditemukan atau belum dikirimkan kepada Anda.']);
         }
 
         $pdfRelPath = SlipPdfService::generatePdf($detail);
