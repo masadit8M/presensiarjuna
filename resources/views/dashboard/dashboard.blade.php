@@ -155,22 +155,6 @@
             <div class="card-body py-2 px-2">
                 <div class="row text-center">
                     <div class="col-3 px-1">
-                        <a href="/presensi/slipgaji" style="text-decoration: none; color: #1e293b; display: block; padding: 6px 2px;">
-                            <div style="width: 42px; height: 42px; margin: 0 auto 4px; border-radius: 12px; background: #dcfce7; color: #16a34a; display: flex; align-items: center; justify-content: center; font-size: 22px;">
-                                <ion-icon name="receipt-outline"></ion-icon>
-                            </div>
-                            <span style="font-size: 0.72rem; font-weight: 600; display: block; line-height: 1.1;">Slip Gaji</span>
-                        </a>
-                    </div>
-                    <div class="col-3 px-1">
-                        <a href="/presensi/pinjaman" style="text-decoration: none; color: #1e293b; display: block; padding: 6px 2px;">
-                            <div style="width: 42px; height: 42px; margin: 0 auto 4px; border-radius: 12px; background: #ccfbf1; color: #0d9488; display: flex; align-items: center; justify-content: center; font-size: 22px;">
-                                <ion-icon name="wallet-outline"></ion-icon>
-                            </div>
-                            <span style="font-size: 0.72rem; font-weight: 600; display: block; line-height: 1.1;">Kasbon</span>
-                        </a>
-                    </div>
-                    <div class="col-3 px-1">
                         <a href="/presensi/pengumuman" style="text-decoration: none; color: #1e293b; display: block; padding: 6px 2px; position: relative;">
                             @if (isset($belumDibacaCount) && $belumDibacaCount > 0)
                                 <span class="badge badge-danger" style="position: absolute; top: 2px; right: 12px; font-size: 0.6rem; z-index: 5;">{{ $belumDibacaCount }}</span>

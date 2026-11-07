@@ -301,35 +301,4 @@ class PinjamanController extends Controller
 
         $this->syncKasbonToGajiMaster($pinjaman->nik);
     }
-
-    /**
-     * Employee Mobile Portal: View own loans & installment history.
-     */
-    public function karyawanIndex()
-    {
-        FiturTambahanSchemaService::ensureTablesExist();
-
-        $user = Auth::guard('karyawan')->user();
-        $allNiks = FiturTambahanSchemaService::getAllNiksForKaryawan($user->nik);
-
-        $pinjaman = DB::table('pinjaman_pegawai')
-            ->whereIn('nik', $allNiks)
-            ->orderByRaw("CASE WHEN status = 'berjalan' THEN 0 ELSE 1 END")
-            ->orderBy('tanggal_pinjaman', 'desc')
-            ->get();
-
-        $angsuranByPinjaman = [];
-        if ($pinjaman->isNotEmpty()) {
-            $ids = $pinjaman->pluck('id')->toArray();
-            $allAngsuran = DB::table('pinjaman_angsuran')
-                ->whereIn('pinjaman_pegawai_id', $ids)
-                ->orderBy('angsuran_ke', 'asc')
-                ->get();
-            foreach ($allAngsuran as $ang) {
-                $angsuranByPinjaman[$ang->pinjaman_pegawai_id][] = $ang;
-            }
-        }
-
-        return view('pinjaman.karyawan_index', compact('pinjaman', 'angsuranByPinjaman', 'user'));
-    }
 }

@@ -38,8 +38,8 @@ class GajiController extends Controller
 
     /**
      * Seluruh aksi admin (penggajian, master gaji, cetak, kirim WA, reset link) hanya untuk Superadmin.
-     * Pengecualian: link publik bertoken WhatsApp dan portal slip gaji mandiri karyawan
-     * (sudah dibatasi oleh NIK pemilik & status terkirim di method masing-masing).
+     * Pengecualian HANYA link publik bertoken WhatsApp (pengiriman file PDF slip ke karyawan);
+     * karyawan tidak memiliki portal/halaman web gaji apapun. Route-nya juga dijaga middleware 'superadmin'.
      */
     public function __construct()
     {
@@ -54,9 +54,6 @@ class GajiController extends Controller
             'viewPublicSlip',
             'downloadPublicSlip',
             'serveSlipFile',
-            'slipGajiKaryawan',
-            'cetakSlipKaryawan',
-            'downloadSlipKaryawan',
         ]);
     }
 
@@ -1414,7 +1411,32 @@ class GajiController extends Controller
     }
 
     /**
+     * Validasi token link slip gaji.
+     * Hanya token acak per-slip (kolom link_token) yang diterima. Token legacy berbasis md5(nik.id.secret)
+     * sengaja DIHAPUS karena dapat dihitung ulang oleh pihak yang mengetahui NIK & ID slip.
+     */
+    private function isValidSlipToken($detail, $token): bool
+    {
+        return !empty($detail->link_token)
+            && is_string($token)
+            && hash_equals((string) $detail->link_token, $token);
+    }
+
+    /**
+     * Deteksi crawler/preview (WhatsApp, dll) agar preview link tidak menghabiskan jatah 1x akses.
+     */
+    private function isPreviewCrawlerRequest(): bool
+    {
+        $userAgent = request()->userAgent() ?? '';
+
+        return (bool) preg_match('/(facebookexternalhit|WhatsApp|Facebot|Twitterbot|TelegramBot|Slackbot|LinkedInBot|Googlebot|bingbot|crawler|spider)/i', $userAgent)
+            || request()->header('Sec-Purpose') === 'prefetch'
+            || request()->header('Purpose') === 'prefetch';
+    }
+
+    /**
      * Publicly view slip PDF document via secure WhatsApp link (no login required).
+     * Token WAJIB valid sebelum data slip apapun (termasuk preview crawler) ditampilkan.
      */
     public function viewPublicSlip($id, $token)
     {
@@ -1428,35 +1450,18 @@ class GajiController extends Controller
             ->select('penggajian_detail.*', 'karyawan.nama_lengkap', 'penggajian_periode.nama_periode', 'penggajian_periode.tgl_selesai', 'cabang.nama_cabang')
             ->first();
 
-        if (!$detail) {
+        // Slip tidak ditemukan & token salah diberi respon yang sama agar ID slip tidak bisa di-enumerasi.
+        if (!$detail || !$this->isValidSlipToken($detail, $token)) {
             return view('gaji.slip_expired', [
-                'status' => 'not_found',
+                'status' => 'invalid',
                 'detail' => null,
-                'superadminEmail' => 'masaditfb@gmail.com',
+                'superadminEmail' => self::SUPERADMIN_EMAIL,
             ]);
         }
 
         // WhatsApp / Social media crawler detection (do not consume token on preview crawl)
-        $userAgent = request()->userAgent() ?? '';
-        $isBot = preg_match('/(facebookexternalhit|WhatsApp|Facebot|Twitterbot|TelegramBot|Slackbot|LinkedInBot|Googlebot|bingbot|crawler|spider)/i', $userAgent)
-            || request()->header('Sec-Purpose') === 'prefetch'
-            || request()->header('Purpose') === 'prefetch';
-
-        if ($isBot) {
+        if ($this->isPreviewCrawlerRequest()) {
             return view('gaji.slip_preview_bot', compact('detail'));
-        }
-
-        // Verify token (supports both current random token and legacy md5 token)
-        $expectedLegacyToken = substr(md5($detail->nik . $detail->id . 'arjuna_slip_token'), 0, 12);
-        $isValid = (!empty($detail->link_token) && hash_equals($detail->link_token, $token)) 
-            || hash_equals($expectedLegacyToken, $token);
-
-        if (!$isValid) {
-            return view('gaji.slip_expired', [
-                'status' => 'invalid',
-                'detail' => null,
-                'superadminEmail' => 'masaditfb@gmail.com',
-            ]);
         }
 
         // Check if link is already expired / downloaded
@@ -1464,7 +1469,7 @@ class GajiController extends Controller
             return view('gaji.slip_expired', [
                 'status' => 'expired',
                 'detail' => $detail,
-                'superadminEmail' => 'masaditfb@gmail.com',
+                'superadminEmail' => self::SUPERADMIN_EMAIL,
             ]);
         }
 
@@ -1487,28 +1492,17 @@ class GajiController extends Controller
             ->select('penggajian_detail.*', 'karyawan.nama_lengkap', 'penggajian_periode.nama_periode', 'penggajian_periode.tgl_selesai', 'cabang.nama_cabang')
             ->first();
 
-        if (!$detail) {
+        // Slip tidak ditemukan & token salah diberi respon yang sama agar ID slip tidak bisa di-enumerasi.
+        if (!$detail || !$this->isValidSlipToken($detail, $token)) {
             abort(404, 'Dokumen Slip Gaji tidak ditemukan.');
         }
 
         // WhatsApp / Bot check: do not consume download
-        $userAgent = request()->userAgent() ?? '';
-        $isBot = preg_match('/(facebookexternalhit|WhatsApp|Facebot|Twitterbot|TelegramBot|Slackbot|LinkedInBot|Googlebot|bingbot|crawler|spider)/i', $userAgent)
-            || request()->header('Sec-Purpose') === 'prefetch'
-            || request()->header('Purpose') === 'prefetch';
-
-        if ($isBot) {
+        if ($this->isPreviewCrawlerRequest()) {
             return view('gaji.slip_preview_bot', compact('detail'));
         }
 
-        // Verify token
-        $expectedLegacyToken = substr(md5($detail->nik . $detail->id . 'arjuna_slip_token'), 0, 12);
-        $isValid = (!empty($detail->link_token) && hash_equals($detail->link_token, $token)) 
-            || hash_equals($expectedLegacyToken, $token);
-
-        if (!$isValid) {
-            return redirect('/slip-gaji/dokumen/' . $id . '/' . $token);
-        }
+        $userAgent = request()->userAgent() ?? '';
 
         // Check if already expired / downloaded
         if (!empty($detail->link_expired) || (!empty($detail->download_count) && $detail->download_count >= 1)) {
@@ -2501,116 +2495,6 @@ class GajiController extends Controller
         }
 
         return redirect()->back()->with(['success' => 'Berhasil menyinkronkan standar gaji, tunjangan, dan potongan dari Master Gaji untuk ' . $updatedCount . ' slip karyawan! Presensi kehadiran tetap aman.']);
-    }
-
-    /**
-     * Employee Mobile Portal: List all salary slips for the logged-in employee.
-     * Supports multi-branch NIK consolidation so teachers see their slips from any branch login.
-     */
-    public function slipGajiKaryawan()
-    {
-        $this->ensureTablesExist();
-        FiturTambahanSchemaService::ensureTablesExist();
-
-        $user = Auth::guard('karyawan')->user();
-        $allNiks = FiturTambahanSchemaService::getAllNiksForKaryawan($user->nik);
-
-        $slips = DB::table('penggajian_detail')
-            ->join('karyawan', 'penggajian_detail.nik', '=', 'karyawan.nik')
-            ->join('penggajian_periode', 'penggajian_detail.periode_id', '=', 'penggajian_periode.id')
-            ->leftJoin('cabang', 'penggajian_detail.kode_cabang', '=', 'cabang.kode_cabang')
-            ->whereIn('penggajian_detail.nik', $allNiks)
-            ->where('penggajian_detail.status_kirim_wa', 1)
-            ->select(
-                'penggajian_detail.*',
-                'karyawan.nama_lengkap',
-                'penggajian_periode.nama_periode',
-                'penggajian_periode.tgl_mulai',
-                'penggajian_periode.tgl_selesai',
-                'penggajian_periode.status as status_periode',
-                'cabang.nama_cabang'
-            )
-            ->orderBy('penggajian_periode.tgl_selesai', 'desc')
-            ->orderBy('penggajian_detail.id', 'desc')
-            ->get();
-
-        $activeLoansCount = 0;
-        $totalSisaPinjaman = 0;
-        try {
-            $loans = DB::table('pinjaman_pegawai')
-                ->whereIn('nik', $allNiks)
-                ->where('status', 'berjalan')
-                ->get();
-            $activeLoansCount = $loans->count();
-            $totalSisaPinjaman = $loans->sum('sisa_pinjaman');
-        } catch (\Throwable $e) {
-        }
-
-        return view('gaji.karyawan_index', compact('slips', 'user', 'activeLoansCount', 'totalSisaPinjaman'));
-    }
-
-    /**
-     * Employee Mobile Portal: View/Print salary slip detail in browser.
-     */
-    public function cetakSlipKaryawan($id)
-    {
-        $this->ensureTablesExist();
-
-        $user = Auth::guard('karyawan')->user();
-        $allNiks = FiturTambahanSchemaService::getAllNiksForKaryawan($user->nik);
-
-        $detail = DB::table('penggajian_detail')
-            ->join('karyawan', 'penggajian_detail.nik', '=', 'karyawan.nik')
-            ->join('penggajian_periode', 'penggajian_detail.periode_id', '=', 'penggajian_periode.id')
-            ->leftJoin('cabang', 'penggajian_detail.kode_cabang', '=', 'cabang.kode_cabang')
-            ->where('penggajian_detail.id', $id)
-            ->whereIn('penggajian_detail.nik', $allNiks)
-            ->where('penggajian_detail.status_kirim_wa', 1)
-            ->select('penggajian_detail.*', 'karyawan.nama_lengkap', 'penggajian_periode.nama_periode', 'penggajian_periode.tgl_selesai', 'cabang.nama_cabang')
-            ->first();
-
-        if (!$detail) {
-            return redirect('/presensi/slipgaji')->with(['warning' => 'Data slip gaji tidak ditemukan atau belum dikirimkan kepada Anda.']);
-        }
-
-        return view('gaji.cetak', compact('detail'));
-    }
-
-    /**
-     * Employee Mobile Portal: Download PDF salary slip directly to phone.
-     */
-    public function downloadSlipKaryawan($id)
-    {
-        $this->ensureTablesExist();
-
-        $user = Auth::guard('karyawan')->user();
-        $allNiks = FiturTambahanSchemaService::getAllNiksForKaryawan($user->nik);
-
-        $detail = DB::table('penggajian_detail')
-            ->join('karyawan', 'penggajian_detail.nik', '=', 'karyawan.nik')
-            ->join('penggajian_periode', 'penggajian_detail.periode_id', '=', 'penggajian_periode.id')
-            ->leftJoin('cabang', 'penggajian_detail.kode_cabang', '=', 'cabang.kode_cabang')
-            ->where('penggajian_detail.id', $id)
-            ->whereIn('penggajian_detail.nik', $allNiks)
-            ->where('penggajian_detail.status_kirim_wa', 1)
-            ->select('penggajian_detail.*', 'karyawan.nama_lengkap', 'penggajian_periode.nama_periode', 'penggajian_periode.tgl_selesai', 'cabang.nama_cabang')
-            ->first();
-
-        if (!$detail) {
-            return redirect('/presensi/slipgaji')->with(['warning' => 'Data slip gaji tidak ditemukan atau belum dikirimkan kepada Anda.']);
-        }
-
-        $pdfRelPath = SlipPdfService::generatePdf($detail);
-        DB::table('penggajian_detail')->where('id', $id)->update([
-            'pdf_path' => $pdfRelPath,
-            'download_count' => ($detail->download_count ?? 0) + 1,
-            'download_at' => now(),
-        ]);
-
-        $fullPath = public_path($pdfRelPath);
-        $cleanName = 'Slip_Gaji_' . preg_replace('/[^A-Za-z0-9]/', '_', $detail->nama_lengkap) . '_' . preg_replace('/[^A-Za-z0-9]/', '_', $detail->nama_periode) . '.pdf';
-
-        return response()->download($fullPath, $cleanName);
     }
 }
 

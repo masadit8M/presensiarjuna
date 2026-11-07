@@ -541,6 +541,7 @@
                             </div>
                         </div>
 
+                        @if (\App\Http\Controllers\GajiController::isSuperAdmin())
                         <!-- PENGATURAN MASTER GAJI KARYAWAN -->
                         <div class="card border-primary mt-3 mb-2 shadow-sm">
                             <div class="card-header bg-primary-lt py-2">
@@ -667,6 +668,7 @@
                                 </div>
                             </div>
                         </div>
+                        @endif
 
                         <div class="row mt-2">
                             <div class="col-12">

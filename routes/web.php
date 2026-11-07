@@ -47,6 +47,13 @@ Route::get('/uploads/slip/{filename}', [GajiController::class, 'serveSlipFile'])
 // Route untuk menyajikan file storage publik (foto selfie presensi, avatar karyawan, surat izin sakit)
 // Memastikan foto selfie dan dokumen tetap muncul di panel dashboard meskipun symlink storage webserver tidak aktif
 Route::get('/storage/{path}', function ($path) {
+    // KEAMANAN: tolak path traversal & jangan pernah menyajikan PDF slip gaji lewat route ini.
+    // Slip gaji hanya boleh diakses lewat link publik bertoken (/slip-gaji/dokumen/{id}/{token}).
+    $normalizedPath = strtolower(str_replace('\\', '/', rawurldecode($path)));
+    if (str_contains($normalizedPath, '..') || str_contains($normalizedPath, 'uploads/slip') || str_starts_with($normalizedPath, 'slip')) {
+        abort(404);
+    }
+
     $candidates = [
         storage_path('app/public/' . $path),
         public_path('storage/' . $path),
@@ -180,11 +187,8 @@ Route::middleware(['auth:karyawan'])->group(function () {
     Route::get('/izin/{kode_izin}/showact', [PresensiController::class, 'showact']);
     Route::get('/izin/{kode_izin}/delete', [PresensiController::class, 'deleteizin']);
 
-    // Slip Gaji & Pinjaman/Kasbon Mandiri (Guru/Karyawan Mobile)
-    Route::get('/presensi/slipgaji', [GajiController::class, 'slipGajiKaryawan']);
-    Route::get('/presensi/slipgaji/{id}/cetak', [GajiController::class, 'cetakSlipKaryawan']);
-    Route::get('/presensi/slipgaji/{id}/download', [GajiController::class, 'downloadSlipKaryawan']);
-    Route::get('/presensi/pinjaman', [PinjamanController::class, 'karyawanIndex']);
+    // KEAMANAN: Karyawan TIDAK punya halaman/link web apapun terkait gaji (slip gaji, kasbon, dll).
+    // Satu-satunya akses adalah file PDF slip yang dikirim Superadmin lewat link publik bertoken (di atas).
 
     // Papan Pengumuman Yayasan (Guru/Karyawan Mobile)
     Route::get('/presensi/pengumuman', [PengumumanController::class, 'karyawanIndex']);
@@ -232,6 +236,8 @@ Route::group(['middleware' => ['role:administrator|admin departemen,user']], fun
     Route::post('/presensi/kendala-absen/{id}/proses', [KendalaController::class, 'adminProses']);
     Route::get('/presensi/log-koreksi', [KendalaController::class, 'logKoreksi']);
 
+    // Penggajian, Master Gaji, Slip Gaji & Pinjaman/Kasbon: HANYA Superadmin (masaditfb@gmail.com)
+    Route::middleware(['superadmin'])->group(function () {
     // Penggajian & Slip Gaji
     Route::get('/gaji', [GajiController::class, 'index']);
     Route::post('/gaji/storeperiode', [GajiController::class, 'storePeriode']);
@@ -259,6 +265,7 @@ Route::group(['middleware' => ['role:administrator|admin departemen,user']], fun
     Route::post('/pinjaman/{id}/angsuran', [PinjamanController::class, 'storeAngsuran']);
     Route::post('/pinjaman/angsuran/{id}/delete', [PinjamanController::class, 'deleteAngsuran']);
     Route::post('/pinjaman/{id}/delete', [PinjamanController::class, 'destroy']);
+    });
 
     // Papan Pengumuman Yayasan (Admin)
     Route::get('/pengumuman', [PengumumanController::class, 'index']);

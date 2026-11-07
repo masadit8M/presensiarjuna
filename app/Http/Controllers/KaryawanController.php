@@ -116,6 +116,7 @@ class KaryawanController extends Controller
                     } catch (\Throwable $ex) {}
                 }
 
+                if (\App\Http\Controllers\GajiController::isSuperAdmin()) { // Master gaji: hanya Superadmin
                 // Simpan atau sinkronkan komponen Master Gaji Karyawan
                 $gapok = (float) str_replace(['.', ','], '', $request->gaji_pokok ?? 1200000);
                 $tunjTransport = (float) str_replace(['.', ','], '', $request->tunjangan_transportasi ?? 150000);
@@ -182,6 +183,7 @@ class KaryawanController extends Controller
                         }
                     }
                 }
+                }
 
                 // Otomatis sinkronkan karyawan baru ke Data Penggajian aktif
                 try {
@@ -207,6 +209,9 @@ class KaryawanController extends Controller
         $departemen = DB::table('departemen')->get();
         $cabang = DB::table('cabang')->orderBy('kode_cabang')->get();
         $karyawan = DB::table('karyawan')->where('nik', $nik)->first();
+        $gajiMaster = null;
+        // Data gaji hanya boleh dimuat untuk Superadmin (masaditfb@gmail.com)
+        if (\App\Http\Controllers\GajiController::isSuperAdmin()) {
         $gajiMaster = DB::table('gaji_master')->where('nik', $nik)->first();
         if (!$gajiMaster && $karyawan && !empty($karyawan->nama_lengkap)) {
             $gajiMaster = DB::table('gaji_master')
@@ -215,6 +220,7 @@ class KaryawanController extends Controller
                 ->where('gaji_master.gaji_pokok', '>', 0)
                 ->select('gaji_master.*')
                 ->first();
+        }
         }
         return view('karyawan.edit', compact('departemen', 'karyawan', 'cabang', 'gajiMaster'));
     }
@@ -288,7 +294,7 @@ class KaryawanController extends Controller
                 }
 
                 // Update / simpan pengaturan master gaji jika ada di form
-                if ($request->has('gaji_pokok')) {
+                if ($request->has('gaji_pokok') && \App\Http\Controllers\GajiController::isSuperAdmin()) { // Master gaji: hanya Superadmin
                     $gapok = (float) str_replace(['.', ','], '', $request->gaji_pokok ?? 0);
                     $tunjTransport = (float) str_replace(['.', ','], '', $request->tunjangan_transportasi ?? 0);
                     $tunjJabatan = (float) str_replace(['.', ','], '', $request->tunjangan_jabatan ?? 0);

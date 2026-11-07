@@ -215,6 +215,7 @@
                         </div>
                     </div>
                 </li>
+                @if (\App\Http\Controllers\GajiController::isSuperAdmin())
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle {{ request()->is(['gaji', 'gaji/*', 'pinjaman', 'pinjaman/*']) ? 'show' : '' }}"
                         href="#navbar-base" data-bs-toggle="dropdown" data-bs-auto-close="false" role="button"
@@ -252,6 +253,7 @@
                         </div>
                     </div>
                 </li>
+                @endif
                 <li class="nav-item">
                     <a class="nav-link {{ request()->is(['pengumuman', 'pengumuman/*']) ? 'active' : '' }}"
                         href="/pengumuman">
