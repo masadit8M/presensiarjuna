@@ -260,7 +260,7 @@
                     kode_jam_kerja: "{{ $kode_jam_kerja }}"
                 },
                 cache: false,
-                timeout: 15000,
+                timeout: 45000,
                 success: function(respond) {
                     var status = respond.split("|");
                     if (status[0] == "success") {
@@ -293,8 +293,11 @@
                     $btn.prop('disabled', false).html(originalHtml);
                     Swal.fire({
                         title: 'Koneksi Terganggu!',
-                        text: 'Gagal menghubungi server. Silakan periksa koneksi internet Anda dan coba lagi.',
-                        icon: 'error'
+                        text: 'Respons server tidak diterima. Presensi Anda mungkin sudah tersimpan. Cek di Dashboard terlebih dahulu sebelum mencoba lagi.',
+                        icon: 'error',
+                        confirmButtonText: 'Ke Dashboard'
+                    }).then(function() {
+                        location.href = '/dashboard';
                     });
                 }
             });

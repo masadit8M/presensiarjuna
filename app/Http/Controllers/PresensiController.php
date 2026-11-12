@@ -274,6 +274,13 @@ class PresensiController extends Controller
         $datapresensi = $presensi->first();
         if ($cek > 0) {
             $ket = "out";
+            // Anti double-submit: jika presensi masuk baru tersimpan < 90 detik lalu (misal respons sebelumnya
+            // timeout lalu karyawan menekan tombol lagi), jangan dicatat sebagai presensi pulang.
+            if (empty($datapresensi->jam_out) && !empty($datapresensi->jam_in)
+                && (time() - strtotime($tgl_presensi . ' ' . $datapresensi->jam_in)) < 90) {
+                echo "success|Terimkasih, Selamat Bekerja|in";
+                return;
+            }
         } else {
             $ket = "in";
         }
@@ -357,9 +364,9 @@ class PresensiController extends Controller
             if ($update) {
                 echo "success|Terimakasih, Hati Hati Di Jalan|out";
                 $this->saveAbsensiPhoto($fileName, $image_base64);
-                try {
-                    GajiController::syncAttendanceByDate($tgl_presensi);
-                } catch (\Throwable $e) {}
+                // Catatan: sinkron gaji TIDAK dijalankan di sini (berat, membangun ulang slip semua karyawan dan
+                // menyebabkan timeout saat banyak presensi bersamaan). Halaman Gaji otomatis menghitung ulang dari
+                // tabel presensi setiap dibuka (GajiController::showPeriode).
 
                 $gatewayUrl = env('WA_GATEWAY_URL');
                 if (!empty($gatewayUrl) && !str_contains($gatewayUrl, 'pedasalami.com')) {
@@ -400,9 +407,7 @@ class PresensiController extends Controller
             if ($simpan) {
                 echo "success|Terimkasih, Selamat Bekerja|in";
                 $this->saveAbsensiPhoto($fileName, $image_base64);
-                try {
-                    GajiController::syncAttendanceByDate($tgl_presensi);
-                } catch (\Throwable $e) {}
+                // Sinkron gaji tidak dijalankan di sini (lihat catatan di presensi pulang).
 
                 $gatewayUrl = env('WA_GATEWAY_URL');
                 if (!empty($gatewayUrl) && !str_contains($gatewayUrl, 'pedasalami.com')) {
